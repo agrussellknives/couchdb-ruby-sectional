@@ -1,0 +1,3 @@
+[submodule "couchdb-ruby-query-server"]
+	path = couchdb-ruby-query-server
+	url = /Users/stephenprater/Sites/couchtest/couchdb-ruby-query-server/
