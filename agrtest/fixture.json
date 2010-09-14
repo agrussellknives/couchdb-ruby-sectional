@@ -1,0 +1,548 @@
+{
+    "docs": [
+        {
+            "_id": "article1",
+            "comment" : "test case 1",
+            "content": "<b>I am an article.</b>",
+            "presentations": {
+                "article1" : {
+                    "type" : "article" 
+                } 
+            } 
+        },
+        {
+            "_id": "item-which-appears-on-an-article-page",
+            "comment" : "test case 2",
+            "content": "<b> I am an articles</b>",
+            "presentations": {
+                "article1": {
+                    "type" : "single-product" 
+                } 
+            } 
+        },
+        {
+            "_id": "item-which-appears-in-both-multi-and-single",
+            "comment" : "test case 3",
+            "spam": "andeggs",
+            "image": "single",
+            "presentations" : {
+                "multi-product-which-contains-item-which-also-appears-in-single" : {
+                    "type": "multi-product" 
+                },
+                "single-product-which-contains-item-which-also-appears-in-multi": {
+                    "type": "single-product" 
+                } 
+            } 
+        },
+        {
+            "_id": "item-with-layouts",
+            "comment" : "test case 4 & 5",
+            "foo": "bar",
+            "presentations": {
+                "item-with-standard-layout-single": {
+                    "type" : "single-product" 
+                },
+                "item-with-custom-layout-single" : {
+                    "type" : "single-product",
+                    "layout" : "custom" 
+                } 
+            } 
+        },
+        {
+            "_id": "item-in-categories",
+            "comment" : "test case 6,7,8",
+            "copy" : "this",
+            "price": "1",
+            "presentations": {
+                "category1": {
+                    "type" : "category" 
+                },
+                "category2" : {
+                    "type" : "category" 
+                },
+                "category3": {
+                    "type" : "category",
+                    "price": "2" 
+                },
+                "category4" : {
+                    "type" : "category",
+                    "copy" : "that" 
+                } 
+            } 
+        },
+        {
+            "_id": "item-with-single-image",
+            "comment" : "test case 9",
+            "images": "image2.jpg",
+            "presentations": {
+                "item-with-single-image": {
+                    "type" : "single-product" 
+                } 
+            } 
+        },
+        {
+            "_id": "item-with-multiple-images",
+            "comment" : "test case 10",
+            "images": [
+                "image1.jpg",
+                "image2.jpg" 
+            ],
+            "presentations": {
+                "item-with-multiple-images": {
+                    "type" : "single-product" 
+                } 
+            } 
+        },
+        {
+            "_id": "item1-multi-copy-multi-image",
+            "comment" : "test case 11-16",
+            "copy": "item1",
+            "image" : "item1.jpg",
+            "presentations": {
+                "multi-item-with-single-image-multiple-copy": {
+                    "type" : "multi-product",
+                    "image" : null 
+                },
+                "multi-item-with-single-image-single-copy" : {
+                    "type" : "multi-product",
+                    "image" : null,
+                    "copy" : null 
+                },
+                "multi-item-with-single-image-mixed-copy" : {
+                    "type" : "multi-product",
+                    "image" : null 
+                },
+                "multi-item-with-image-for-each-knife" : {
+                    "type" : "multi-product" 
+                },
+                "multi-item-with-multiple-group-images" : {
+                    "type" : "multi-product",
+                    "image" : null 
+                },
+                "multi-item-with-multiple-group-images-and-individuals" : {
+                    "type" : "multi-product" 
+                } 
+            } 
+        },
+        {
+            "_id": "item2-multi-copy-multi-image",
+            "comment" : "test case 11-16",
+            "copy": "item2",
+            "image" : "item2.jpg",
+            "presentations": {
+                "multi-item-with-single-image-multiple-copy": {
+                    "type" : "multi-product",
+                    "image" : null 
+                },
+                "multi-item-with-single-image-single-copy" : {
+                    "type" : "multi-product",
+                    "image" : null,
+                    "copy" : null 
+                },
+                "multi-item-with-single-image-mixed-copy" : {
+                    "type" : "multi-product",
+                    "image" : null 
+                },
+                "multi-item-with-image-for-each-knife" : {
+                    "type" : "multi-product" 
+                },
+                "multi-item-with-multiple-group-images" : {
+                    "type" : "multi-product",
+                    "image" : null 
+                },
+                "multi-item-with-multiple-group-images-and-individuals" : {
+                    "type" : "multi-product" 
+                } 
+            } 
+        },
+        {
+            "_id": "item3-multi-copy-multi-image",
+            "comment" : "test case 11-16",
+            "copy": "item3",
+            "image" : "item3.jpg",
+            "presentations": {
+                "multi-item-with-single-image-multiple-copy": {
+                    "type" : "multi-product",
+                    "image" : null 
+                },
+                "multi-item-with-single-image-single-copy" : {
+                    "type" : "multi-product",
+                    "image" : null,
+                    "copy" : null 
+                },
+                "multi-item-with-single-image-mixed-copy" : {
+                    "type" : "multi-product",
+                    "image" : null,
+                    "copy" : null 
+                },
+                "multi-item-with-image-for-each-knife" : {
+                    "type" : "multi-product" 
+                },
+                "multi-item-with-multiple-group-images" : {
+                    "type" : "multi-product",
+                    "image" : null 
+                },
+                "multi-item-with-multiple-group-images-and-individuals" : {
+                    "type" : "multi-product" 
+                } 
+            } 
+        },
+        {
+            "_id": "multi-item-with-single-image-multiple-copy",
+            "comment" : "test case 11",
+            "image": "image1.jpg",
+            "presentations": {
+                "multi-item-with-single-image-multiple-copy": {
+                    "type" : "multi-product" 
+                } 
+            } 
+        },
+        {
+            "_id": "multi-item-with-single-image-single-copy",
+            "comment" : "test case 12 and 17",
+            "image": "single-image.jpg",
+            "copy": "single-copy",
+            "presentations": {
+                "multi-item-with-single-image-single-copy": {
+                    "type" : "multi-product" 
+                },
+                "category1" : {
+                    "type" : "category" 
+                },
+                "category2" : {
+                    "type" : "category" 
+                } 
+            } 
+        },
+        {
+            "_id": "multi-item-with-multiple-group-images",
+            "comment" : "test case 15",
+            "images": [
+                "image1.jpg",
+                "image2.jpg",
+                "image3.jpg" 
+            ],
+            "presentations": {
+                "multi-item-with-multiple-group-images": {
+                    "type" : "multi-product" 
+                } 
+            } 
+        },
+        {
+            "_id": "multi-item-with-multiple-group-images-and-individuals",
+            "comment" : "test case 16",
+            "images" : [
+                "groupimage1.jpg",
+                "groupimage2.jpg" 
+            ],
+            "presentations": {
+                "multi-item-with-multiple-group-images-and-individuals": {
+                    "type" : "multi-product" 
+                } 
+            } 
+        },
+        {
+            "_id": "item1-of-group",
+            "comment": "test case 18-24",
+            "name" : "item1",
+            "presentations": {
+                "multi-item-group1-2-3": {
+                    "type" : "multi-product" 
+                },
+                "multi-item-group1-2": {
+                    "type" : "multi-product" 
+                },
+                "multi-item-group1-3" : {
+                    "type" : "multi-product" 
+                },
+                "multi-item-group1-2-3-attributes": {
+                    "type" : "multi-product",
+                    "name" : "item1-replaced" 
+                },
+                "item1-of-group-same-attributes" : {
+                    "type" : "single-product" 
+                },
+                "item1-of-group-different-attributes" : {
+                    "type" : "single-product",
+                    "name" : "item1-single-replaced" 
+                },
+                "multi-item-group1-2-3-custom-layout" : {
+                    "type" : "single-product",
+                    "layout" : "custome" 
+                } 
+            } 
+        },
+        {
+            "_id": "item2-of-group",
+            "comment": "test case 18-20, 24",
+            "name" : "item2",
+            "presentations": {
+                "multi-item-group1-2-3": {
+                    "type" : "multi-product" 
+                },
+                "multi-item-group1-2": {
+                    "type" : "multi-product" 
+                },
+                "multi-item-group2-3": {
+                    "type" : "multi-product" 
+                },
+                "multi-item-group1-2-3-attributes": {
+                    "type" : "multi-product" 
+                },
+                "multi-item-group1-2-3-custom-layout" : {
+                    "type" : "single-product",
+                    "layout" : "custome" 
+                } 
+            } 
+        },
+        {
+            "_id": "item3-of-group",
+            "comment" : "test case 18-20, 24",
+            "name" : "item3",
+            "presentations": {
+                "multi-item-group1-2-3": {
+                    "type" : "multi-product" 
+                },
+                "multi-item-group2-3": {
+                    "type" : "multi-product" 
+                },
+                "multi-item-group1-3" : {
+                    "type" : "multi-product" 
+                },
+                "multi-item-group1-2-3-attributes": {
+                    "type" : "multi-product",
+                    "name" : "item3-replaced" 
+                },
+                "multi-item-group1-2-3-custom-layout" : {
+                    "type" : "single-product",
+                    "layout" : "custome" 
+                } 
+            } 
+        },
+        {
+            "_id": "category4",
+            "comment" : "does not appear in hierarchy - tase case 31",
+            "foo": "bar4",
+            "presentations": {
+                "category4" : {
+                    "type" : "category4" 
+                } 
+            } 
+        },
+        {
+            "_id": "page-category",
+            "comment" : "test case 32",
+            "foo": "bar-page",
+            "layout" : "page-like",
+            "presentations": {
+                "page-category": {
+                    "type" : "category" 
+                } 
+            } 
+        },
+        {
+            "_id": "category1",
+            "foo": "bar",
+            "presentations": {
+                "category1": {
+                    "type" : "category" 
+                },
+                "special-category2" : {
+                    "type" : "category" 
+                } 
+            } 
+        },
+        {
+            "_id": "category2",
+            "foo": "bar2",
+            "presentations": {
+                "category2": {
+                    "type" : "category" 
+                },
+                "category1" : {
+                    "type" : "sub-category" 
+                } 
+            } 
+        },
+        {
+            "_id": "category3",
+            "comment" : "test case 35, 33",
+            "foo": "bar3",
+            "presentations": {
+                "category3": {
+                    "type" : "category" 
+                },
+                "category1" : {
+                    "type" : "sub-category" 
+                },
+                "special_category" : {
+                    "type" : "category" 
+                } 
+            } 
+        },
+        {
+            "_id": "item-in-categories-1-and-2",
+            "comment" : "test case 33",
+            "name": "item-in-categories-1-and-2",
+            "presentations": {
+                "category1": {
+                    "type" : "category" 
+                },
+                "category2": {
+                    "type" : "category" 
+                } 
+            } 
+        },
+        {
+            "_id": "special-category",
+            "name": "special-category",
+            "presentations": {
+                "special-category": {
+                    "type" : "category" 
+                } 
+            } 
+        },
+        {
+            "_id": "special-category2",
+            "name": "special-category2",
+            "presentations": {
+                "special-category2": {
+                    "type" : "category" 
+                } 
+            } 
+        },
+        {
+            "_id": "special-category-with-custom-layout",
+            "layout": "custom-special-category",
+            "presentations": {
+                "special-category-with-custom-layout": {
+                    "type" : "category" 
+                } 
+            } 
+        },
+        {
+            "_id": "simple-single-item-id",
+            "link" : "simple-single-item",
+            "name": "simple-single-item",
+            "presentations": {
+                "special-category": {
+                    "type" : "category" 
+                },
+                "simple-single-item" : {
+                    "type" : "single-product" 
+                },
+                "simple-multi-item" : {
+                    "type" : "multi-product" 
+                },
+                "special-category2" : {
+                    "type" : "category" 
+                } 
+            } 
+        },
+        {
+            "_id": "simple-multi-item-id",
+            "link" : "simple-multi-item",
+            "key": "value",
+            "presentations": {
+                "simple-multi-item": {
+                    "type" : "single-product" 
+                } 
+            } 
+        },
+        {
+            "_id": "simple-multi-item",
+            "name": "simple-multi-item",
+            "presentations": {
+                "special-category": {
+                    "type" : "category" 
+                },
+                "category1" : {
+                    "type" : "category" 
+                },
+                "special-category2" : {
+                    "type" : "category" 
+                } 
+            } 
+        },
+        {
+            "_id": "searchable-article",
+            "comment": "test 42",
+            "presentations": {
+                "agr-search": {
+                    "type" : "search" 
+                } 
+            } 
+        },
+        {
+            "_id": "searchable-category",
+            "comment": "test 43",
+            "presentations": {
+                "agr-search": {
+                    "type" : "search" 
+                },
+                "searchable-category" : {
+                    "type" : "category" 
+                } 
+            } 
+        },
+        {
+            "_id": "searchable-single-and-multi-item",
+            "comment": "test 45",
+            "presentations": {
+                "agr-search": {
+                    "type" : "search" 
+                },
+                "searchable-multi-item" : {
+                    "type" : "multi-product" 
+                } 
+            } 
+        },
+        {
+            "_id": "searchable-multi-item",
+            "comment": "test 47",
+            "presentations": {
+                "searchable-multi-item": {
+                    "type" : "multi-product" 
+                },
+                "searchable-multi-item2" : {
+                    "type" : "multi-product" 
+                } 
+            } 
+        },
+        {
+            "_id": "searchable-single-item-with-changed-attribute",
+            "comment": "test 46",
+            "foo" : "bar",
+            "presentations": {
+                "agr-search": {
+                    "type" : "search",
+                    "foo" : "baz" 
+                } 
+            } 
+        },
+        {
+            "_id": "searchable-multi-item",
+            "comment": "test 45,47",
+            "presentations": {
+                "searchable-multi-item": {
+                    "type" : "single-product" 
+                },
+                "agr-search" : {
+                    "type" : "search" 
+                } 
+            } 
+        },
+        {
+            "_id": "searchable-multi-item2",
+            "comment": "test 47",
+            "presentations": {
+                "searchable-multi-item2": {
+                    "type" : "multi-product" 
+                },
+                "agr-search" : {
+                    "type" : "search" 
+                } 
+            } 
+        } 
+    ]
+}

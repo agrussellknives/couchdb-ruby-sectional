@@ -1,0 +1,36 @@
+{
+	"fields" : {
+		"category" : [
+			"images",
+			"sequence",
+			"short_desc",
+			"headline",
+			"price",
+			"_id",
+			"short_option_name",
+			"link",
+			"active"
+			],
+		"single_product" : [
+			"images",
+			"subhead",
+			"description",
+			"detailed_description",
+			"_id",
+			"option_name",
+			"specs"
+			],
+		"search" : "category",
+		"multi-product" : "single_product"
+	},
+	"filters" : {
+		"category": [
+			"active == true"
+		]
+	},
+	"sort" : {
+		"category" : ["sequence"]
+	}
+}
+
+
