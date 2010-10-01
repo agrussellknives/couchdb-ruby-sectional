@@ -72,7 +72,7 @@ namespace "couchdb" do
     begin
       if not args.design_doc then
         # fetch all design docs
-        ddocs = RestClient.get "http://127.0.0.1:5984/#{args.database}/_all_docs?startkey=%22_design%2F%22&endkey=%22_design0%22" do |res| 
+        ddocs = RestClient.get "http://127.0.0.1:5984/#{args.database}/_all_docs?startkey=%22_design%2F%22&endkey=%22_design0%22" do |res|
           JSON.parse(res.body)['rows'].collect { |i| i['_id'] }
         end
       else
