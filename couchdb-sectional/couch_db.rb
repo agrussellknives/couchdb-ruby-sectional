@@ -57,12 +57,7 @@ module CouchDB
       @pipe = EM.attach $stdin, STATE_PROCESSORS[state].protocol do |pipe|
         pipe.run do |command|
           begin 
-            debugger 
-            write STATE_PROCESSORS[state].new.process(command)
-          rescue ProcessorDelegatesTo => e 
-            puts "switching state" 
-            state = e.state
-            retry
+            write STATE_PROCESSORS[state].new.process(command) 
           rescue ProcessorDoesNotRespond, ProcessorExit => e
             exit :error, e.to_s 
           end

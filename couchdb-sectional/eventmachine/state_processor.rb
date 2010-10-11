@@ -7,18 +7,20 @@ class ProcessorConflictError < ProcessorError; end
 class ProcessorExit < ProcessorError; end
 class ProcessorDoesNotRespond < ProcessorError; end
 
-class ProcessorDelegatesTo < ProcessorError 
-  attr_reader :state
-  def initialize state
-    @state = state
-  end
-end
 
 class StateProcessorFactory
   include Singleton
   class << self
+    @stateprocessors = []
+    def stateprocessors state
+      index = @stateprocessors.index(state)
+      @stateprocessors[index]
+    end
+    def statetoclass state
+      state.to_s.camelize
+    end
     def create state, protocol, &block
-      class_name = state.to_s.camelize
+      class_name = statetoclass state 
       unless const_defined? class_name.to_sym
           klass = Class.new(Object) do
             @state = state
@@ -29,36 +31,61 @@ class StateProcessorFactory
               attr_accessor :state
               attr_reader :commands
             end
+
             attr_accessor :command
-            def initialize
+            attr_accessor :full_command
+
+            def initialize context = nil
+              @context = context 
               @command = nil
               @executed_command = nil
+              @full_command = nil
             end
+
             def switch_state state
-              raise ProcessorDelegatesTo, state 
+              begin
+                state_class = const_get(StateProcessorFactory.statetoclass(state))
+              rescue NameError => e
+                raise ProcessorInvalidState, 
+                  "No processor defined for #{StateProcessorFactory.statetoclass(state).to_s}"
+              end
+              context = {}
+              context = yield context, @full_command if block_given?
+              StateProcessorFactory.stateprocessors(state_class).new(context).process(@full_command)
             end
+
             def error e
               $stderr.puts e 
             end
+
             def exit e
               raise ProcessorExit, e
             end
+           
             def on_error error=nil
               self.define_method :report_error, error, &block
             end
-            def otherwise 
-              if block_given?
-                yield @command
+            
+            def otherwise cmd 
+              return if @executed_command
+              if block_given? 
+                yield *(@full_command)
                 @executed_command = @command
+              else
+                raise ProcessorDoesNotRespond, ["unknown command","unkknown command #{cmd}"]
               end
             end
+            
             def on cmd
               if cmd == @command
-                yield @command
+                yield *(@full_command)
+                debugger
                 @executed_command = @command
               end
             end
-            def process cmd 
+           
+            def process cmd
+              @full_command = cmd
               @command = cmd.shift.to_sym
               begin
                 instance_exec(command,&(self.class.commands))
@@ -73,21 +100,16 @@ class StateProcessorFactory
                   error e
                 end
               end
-            
-              if @executed_command == nil
-                self.otherwise
-                cmd = @command
-                @command = nil
-                raise ProcessorDoesNotRespond, ["unknown_command","unknown command #{cmd}"]
-              end
-
             end
+            
             def inspect
                "#<#{self.class}:#{self.object_id << 1} protocol: #{self.class.protocol}>"
             end
           end
-          const_set(class_name.to_sym,klass) 
-          const_get(class_name.to_sym) # return the class
+          const_set(class_name.to_sym,klass)
+          k_klass = const_get(class_name.to_sym) # get the class 
+          StateProcessorFactory.stateprocessors << k_klass # keep track of everything we create
+          k_klass
       else
         raise ProcessorConflictError, "You cannot create two Processors for the same state in a single process."
       end
