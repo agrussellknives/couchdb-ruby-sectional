@@ -1,3 +1,3 @@
 [submodule "couchdb-ruby-query-server"]
 	path = couchdb-ruby-query-server
-	url = git@github.com:agrussellknives/couchdb-ruby-query-server 
+	url = git://github.com/agrussellknives/couchdb-ruby-query-server.git
