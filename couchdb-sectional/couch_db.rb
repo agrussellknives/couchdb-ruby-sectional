@@ -13,7 +13,6 @@ require 'eventmachine'
 %w(query_server_protocol state_processor).each {|mod| require "#{File.dirname(__FILE__)}/eventmachine/#{mod}" }
 
 module CouchDB
-  class UnknownStateError < StandardError; end
   include Arguments
   extend self
   $realstdout = $stdout
@@ -21,7 +20,6 @@ module CouchDB
   $stdout = $stderr
   $error = $stderr
   
-  STATE_PROCESSORS = {}
   
   attr_accessor :debug, :wait_for_connection, :stop_on_error
   
@@ -29,18 +27,8 @@ module CouchDB
     @state = key.intern
   end
   
-  def state key = :default, protocol = CouchDBQueryServerProtocol, &block
-    # this method does double duty.
-    return @state unless key and block_given?
-    
-    key = key.intern
-    if block_given? then
-      STATE_PROCESSORS[key] = StateProcessorFactory.create(key, protocol, &block)
-    else
-      STATE_PROCESSORS[key] = StateProcessorFactory.create(key, NilProtocol) do |command|
-        puts command
-      end
-    end
+  def state
+    return @state 
   end
   
   def stderr_to=(val)
@@ -48,16 +36,16 @@ module CouchDB
   end
   
   def start initial_state = nil
-    unless (initial_state and STATE_PROCESSORS.has_key? initial_state.intern) then
-      raise UnknowStateError 'CouchLoop was started in an unknown or nil state.'
+    unless (initial_state and StateProcessorFactory.processors.knows_state? initial_state) then
+      raise StateProcessorFactory::ProcessorInvalidState 'CouchLoop was started in an unknown or nil state.'
     end
     state = initial_state
     (log 'Waiting for debugger...'; debugger) if wait_for_connection  
     EventMachine::run do
-      @pipe = EM.attach $stdin, STATE_PROCESSORS[state].protocol do |pipe|
+      @pipe = EM.attach $stdin, StateProcessorFactory.processor[state] do |pipe|
         pipe.run do |command|
           begin 
-            write STATE_PROCESSORS[state].new.process(command) 
+            write StateProcessorFactory.processor[state].new.process(command) 
           rescue ProcessorDoesNotRespond, ProcessorExit => e
             exit :error, e.to_s 
           end
@@ -85,7 +73,12 @@ module CouchDB
   
 end
 
-def commands_for key, protocol = CouchDBQueryServerProtocol, &block
-  CouchDB.state key, protocol, &block
+def commands_for key = :default, protocol = CouchDBQueryServerProtocol, &block
+  if block_given? then
+    StateProcessorFactory.create(key, protocol, &block)
+  else
+    StateProcessorFactory.create(key,protocol) do |command|
+      puts command
+    end
+  end
 end
-
