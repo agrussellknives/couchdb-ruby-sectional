@@ -1,6 +1,6 @@
 require 'singleton'
 require 'active_support/core_ext'
-
+require 'forwardable'
 
 class ProcessorError < StandardError; end
 class ProcessorConflictError < ProcessorError; end
@@ -15,26 +15,27 @@ class StateProcessorFactory
     def initialize
       @processorlist= {}
     end
-    def to_lookupsymbol state
-      debugger
+    def lookup state, style = false
+      raise ArgumentError unless [false,:class].include? style
       if state.class == Symbol or state.class == String then
-        class_name = state.to_s.underscore
+        (style == :class) ? state.to_s.camelize : state.to_s.underscore.intern  
       elsif state.class == Class then
-        state.to_s.underscore.split('/').last.intern  
+        (style == :class) ? state.to_s : state.to_s.underscore.split('/').last.intern  
       end
     end
-        
+
     def knows_state? state
-      @processorlist.has_key? to_lookupsymbol(state) ? true : false
+
+      @processorlist.has_key? lookup(state) ? true : false
     end
 
     def << state
-      @processorlist[to_lookupsymbol(state)] = state
+      @processorlist[lookup(state)] = state
     end
        
     def [] state
       if knows_state? state
-        @processorlist[to_lookupsymbol(state)]
+        @processorlist[lookup(state)]
       else
         raise ProcessorInvalidState, "No Processor is defined for #{state}"
       end
@@ -42,13 +43,13 @@ class StateProcessorFactory
   end
 
   @processors= StateProcessorList.new
+  self.extend SingletonForwardable
+  self.def_delegators :@processors, :lookup, :knows_state, :<<, :[]
     
   class << self
 
-    attr_reader :processors
-
     def create state, protocol, &block
-      class_name = @processors.to_lookupsymbol state 
+      class_name = @processors.lookup state, :class
       klass = Class.new(Object) do
         @state = state
         @protocol = protocol
@@ -71,12 +72,12 @@ class StateProcessorFactory
 
         def switch_state state
           begin
-            state_class = StateProcessorFactory.processors[state]
+            state_class = StateProcessorFactory[state]
           rescue ProcessorInvalidState
             if block_given? then
               context = {}
               context = yield context, @full_command
-              StateProcessorFactory.processors[state_class].new(context).process(@full_command)
+              StateProcessorFactory[state_class].new(context).process(@full_command)
             else
               raise
             end
@@ -138,7 +139,7 @@ class StateProcessorFactory
       const_set(class_name.to_sym,klass)
       k_klass = const_get(class_name.to_sym) # get the class 
       debugger  
-      StateProcessorFactory.processors << k_klass # keep track of everything we create
+      StateProcessorFactory << k_klass # keep track of everything we create
       k_klass
     end  
   end
