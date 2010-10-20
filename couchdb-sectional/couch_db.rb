@@ -1,25 +1,27 @@
 require 'ruby-debug'
-require 'eval-debugger'
 
 #stdlib
 require 'json'
 require 'eventmachine'
 
 
+# utility
+require_relative 'eval_debugger'
+
 # couchdb requires
-%w(runner sandbox arguments).each {|mod| require "#{File.dirname(__FILE__)}/couchdb_core/#{mod}" }
+%w(runner sandbox arguments).each {|mod| require_relative "couchdb_core/#{mod}" }
 
 #event machine
-%w(query_server_protocol state_processor).each {|mod| require "#{File.dirname(__FILE__)}/eventmachine/#{mod}" }
+%w(query_server_protocol state_processor).each {|mod| require_relative "eventmachine/#{mod}" } 
 
 module CouchDB
   include Arguments
+  include StateProcessorExceptions
   extend self
   $realstdout = $stdout
   $realstdin = $stdin
   $stdout = $stderr
   $error = $stderr
-  
   
   attr_accessor :debug, :wait_for_connection, :stop_on_error
   
@@ -37,17 +39,16 @@ module CouchDB
   
   def start initial_state = nil
     unless (initial_state and StateProcessorFactory.knows_state? initial_state) then
-      debugger
-      raise ProcessorInvalidState,'CouchLoop was started in an unknown or nil state.'
+      raise StateProcessorInvalidState,'CouchLoop was started in an unknown or nil state.'
     end
     state = initial_state
     (log 'Waiting for debugger...'; debugger) if wait_for_connection  
     EventMachine::run do
-      @pipe = EM.attach $stdin, StateProcessorFactory[state] do |pipe|
+      @pipe = EM.attach $stdin, StateProcessorFactory[state].protocol do |pipe|
         pipe.run do |command|
           begin 
             write StateProcessorFactory[state].new.process(command) 
-          rescue ProcessorDoesNotRespond, ProcessorExit => e
+          rescue StateProcessorDoesNotRespond, StateProcessorExit => e
             exit :error, e.to_s 
           end
         end
@@ -75,11 +76,5 @@ module CouchDB
 end
 
 def commands_for key = :default, protocol = CouchDBQueryServerProtocol, &block
-  if block_given? then
-    StateProcessorFactory.create(key, protocol, &block)
-  else
-    StateProcessorFactory.create(key,protocol) do |command|
-      puts command
-    end
-  end
+  StateProcessor.commands_for(key, protocol, &block)
 end

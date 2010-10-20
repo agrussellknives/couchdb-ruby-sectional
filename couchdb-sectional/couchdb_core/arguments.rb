@@ -40,7 +40,7 @@ module Arguments
         when :debug 
           CouchDB.debug = true
           require 'ruby-debug'
-          require 'eval-debugger'
+          require_relative "../eval_debugger"
         when :stop 
           CouchDB.stop_on_error = true
         when :wait 
