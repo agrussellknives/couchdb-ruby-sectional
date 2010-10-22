@@ -1,5 +1,6 @@
 class StateProcessorList
- 
+  include StateProcessorExceptions
+  
   def initialize
     @processorlist= {}
   end
@@ -25,7 +26,7 @@ class StateProcessorList
     if knows_state? state
       @processorlist[lookup(state)]
     else
-      raise ProcessorInvalidState, "No Processor is defined for #{state}"
+      raise StateProcessorInvalidState, "No Processor is defined for #{state}"
     end
   end
 
