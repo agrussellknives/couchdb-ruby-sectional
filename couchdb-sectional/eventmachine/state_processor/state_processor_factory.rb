@@ -38,7 +38,8 @@ class StateProcessorFactory
           @command = nil
           @executed_command = nil
           @full_command = nil
-          @origin = origin;
+          @origin = origin
+          @result = nil
         end
 
         def switch_state state, protocol = nil, top = false, &block
@@ -54,7 +55,7 @@ class StateProcessorFactory
           #TODO investigate whether flatten is appropriate here, or if we should do a single
           # level flatten, or perhaps just leave it to the calling state
           # to prepare our arguments for us.
-          state_class.new(context,@origin).process(@full_command.flatten,top)
+          @result = state_class.new(context,@origin).process(@full_command.flatten,top) 
         end
 
         def context item=nil
@@ -95,9 +96,10 @@ class StateProcessorFactory
         
         def on cmd
           if cmd == @command
-            yield *(@full_command)
+            result = yield *(@full_command)
             @executed_command = @command
           end
+          @result = result.nil? ? @result : result
         end
        
         def process cmd, top=true 
@@ -125,13 +127,14 @@ class StateProcessorFactory
           # as the continuation for the rest of the
           # commands
           if top
-            callcc do |here|
+            @result = callcc do |here|
               @origin = here 
               workf.call
             end
           else
             workf.call
           end
+          @result
         end
         
         def inspect

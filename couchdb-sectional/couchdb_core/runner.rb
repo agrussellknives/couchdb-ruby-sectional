@@ -31,7 +31,7 @@ module CouchDB
           raise FatalError, errorMessage if [:fatal,"fatal"].include?(error)
           errorMessage
         else
-          {error.to_s => message.join(', ')}
+          {error => message.join(', ')}
         end
         raise HaltedFunction
       rescue FatalError => e
