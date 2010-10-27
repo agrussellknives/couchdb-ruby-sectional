@@ -3,6 +3,7 @@
 require_relative "state_processor/state_processor_exceptions"
 require_relative "state_processor/state_processor_list"
 require_relative "state_processor/state_processor_factory"
+require_relative "state_processor/state_processor_worker"
 
 module StateProcessor
 

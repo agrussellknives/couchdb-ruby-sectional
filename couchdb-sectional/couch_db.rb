@@ -16,7 +16,7 @@ require_relative 'eval_debugger'
 
 module CouchDB
   include Arguments
-  include StateProcessorExceptions
+  include StateProcessor::StateProcessorExceptions
   extend self
   $realstdout = $stdout
   $realstdin = $stdin
@@ -38,16 +38,16 @@ module CouchDB
   end
   
   def start initial_state = nil
-    unless (initial_state and StateProcessorFactory.knows_state? initial_state) then
+    unless (initial_state and StateProcessor::StateProcessorFactory.knows_state? initial_state) then
       raise StateProcessorInvalidState,'CouchLoop was started in an unknown or nil state.'
     end
     state = initial_state
     (log 'Waiting for debugger...'; debugger) if wait_for_connection  
     EventMachine::run do
-      @pipe = EM.attach $stdin, StateProcessorFactory[state].protocol do |pipe|
+      @pipe = EM.attach $stdin, StateProcessor::StateProcessorFactory[state].protocol do |pipe|
         pipe.run do |command|
           begin 
-            write StateProcessorFactory[state].new.process(command) 
+            write StateProcessor::StateProcessorFactory[state].new.process(command) 
           rescue StateProcessorDoesNotRespond, StateProcessorExit => e
             exit :error, e.to_s 
           end
