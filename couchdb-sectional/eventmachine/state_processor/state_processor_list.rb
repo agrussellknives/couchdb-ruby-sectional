@@ -1,4 +1,4 @@
-module StateProcessor
+class StateProcessor
   class StateProcessorList
     include StateProcessorExceptions
     
@@ -11,7 +11,7 @@ module StateProcessor
       if state.class == Symbol or state.class == String then
         (style == :class) ? state.to_s.camelize : state.to_s.underscore.intern  
       elsif state.class == Class then
-        (style == :class) ? state.to_s : state.to_s.underscore.split('/').last.intern  
+        (style == :class) ? state.to_s : state.to_s.underscore.intern  
       end
     end
 
@@ -19,8 +19,8 @@ module StateProcessor
       @processorlist.has_key?(lookup(state))
     end
 
-    def << state
-      @processorlist[lookup(state)] = state
+    def add_state state, key
+      @processorlist[key] = state
     end
        
     def [] state

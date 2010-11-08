@@ -76,5 +76,6 @@ module CouchDB
 end
 
 def commands_for key = :default, protocol = CouchDBQueryServerProtocol, &block
+  puts 'called couchdb commandsfor'
   StateProcessor.commands_for(key, protocol, &block)
 end

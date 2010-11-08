@@ -1,8 +1,8 @@
 module NilProtocol
-    include EM::Protocols::LineText2
+  include EM::Protocols::LineText2
 
     def receive_line data
-      @run.call(command)
+      @run.call(data)
     end
 
     def send_data data
@@ -13,5 +13,4 @@ module NilProtocol
       @run = block
     end
 
-  end
 end

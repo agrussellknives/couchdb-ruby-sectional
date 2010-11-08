@@ -1,4 +1,4 @@
-module StateProcessor
+class StateProcessor
   module StateProcessorExceptions
     class StateProcessorError < StandardError; end
     class StateProcessorConflictError < StateProcessorError; end

@@ -3,11 +3,11 @@ require 'active_support/core_ext'
 require 'forwardable'
 require 'continuation'
 
-module StateProcessor
+class StateProcessor
   class StateProcessorFactory
     include StateProcessorExceptions
 
-    OPTLIST = [:context, :command, :executed_command, :full_command, :origin, :result, :worker]  
+    OPTLIST = [:context, :command, :executed_command, :full_command, :origin, :result]  
     
     @processors = StateProcessorList.new()
     class << self
@@ -15,21 +15,25 @@ module StateProcessor
     end
 
     self.extend SingleForwardable
-    self.def_delegators :processors, :lookup, :knows_state?, :<<, :[] 
+    self.def_delegators :processors, :lookup, :knows_state?, :add_state, :[] 
 
     class << self
 
-      def create state, protocol, opts = {}, &block
+      def create state, protocol, worker, create_options = {}, &block
         class_name = lookup state, :class
         klass = Class.new(Object) do
+          
+          #valid creation_options
           include StateProcessorExceptions
           @state = state
           @protocol = protocol
           @commands = block
+          @worker = worker
           class << self
             attr_accessor :protocol
             attr_accessor :state
             attr_reader :commands
+            attr_reader :worker
           end
 
           OPTLIST.collect { |opt| attr_accessor opt }
@@ -54,13 +58,15 @@ module StateProcessor
           end
 
           def switch_state state, opts = {}, &block
-            protocol = opts.has_key? :protocol ? opts[:protocol] : self.class.protocol
-            top = opts.has_key? :top ? opts[:top] : false
+            protocol = opts.has_key?(:protocol) ? opts[:protocol] : self.class.protocol
+            top = opts.has_key?(:top) ? opts[:top] : false
+            debugger
             begin
               state_class = StateProcessorFactory[state]
             rescue StateProcessorInvalidState
               raise unless block_given?
-              StateProcessorFactory.create state, protocol, &block
+              state = yield
+              #StateProcessorFactory.create state, protocol, &block
               retry 
             end
             #TODO investigate whether flatten is appropriate here, or if we should do a single
@@ -80,12 +86,13 @@ module StateProcessor
           end
 
           def method_missing(m, *args, &block)
-            debugger
-            if worker and worker.respond_to m
+            puts "method missing called #{m}, #{args}"
+            worker = self.class.worker 
+            if worker and worker.respond_to? m
               worker.send m, *args, &block
             else
-              raise StateProcessorCannotPerformAction.new "Could not perform action #{m} in #{self.class} \
-                with worker #{worker.class}"
+              raise StateProcessorCannotPerformAction.new( 
+                  "Could not perform action #{m} in #{self.class} with worker #{worker.class}")
             end 
           end
 
@@ -116,6 +123,7 @@ module StateProcessor
               yield @command, *(@full_command)
               @executed_command = @command
             else
+              debugger
               raise StateProcessorDoesNotRespond, ["unknown command","unknown command #{cmd}"]
             end
           end
@@ -168,11 +176,9 @@ module StateProcessor
              "#<#{self.class}:0x#{hex_id} protocol: #{self.class.protocol}>"
           end
         end
-
-        const_set(class_name.to_sym,klass)
-        StateProcessorFactory << klass # keep track of everything we create
-     
-     end  
+        StateProcessorFactory.add_state klass, class_name.underscore.intern 
+        class_name.underscore.intern
+      end  
     end
   end
 end
