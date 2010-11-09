@@ -1,4 +1,4 @@
-class StateProcessor
+module StateProcessor
   class StateProcessorList
     include StateProcessorExceptions
     

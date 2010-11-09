@@ -1,3 +1,5 @@
+require 'active_support/concern'
+
 #include state processor stuff
 
 require_relative "state_processor/state_processor_exceptions"
@@ -9,11 +11,43 @@ require_relative "state_processor/state_processor_worker"
 require_relative "nil_protocol"
 require_relative "query_server_protocol"
 
-class StateProcessor
+module ClassNesting
+  # this cannot be the best way to do this
+  # start one up the nesting chain, and see if any of
+  # our outer classes have the method we're looking for.
+  # seriously, this feels pretty wrong...
+  def nesting
+    nesteds = self.to_s.split('::')
+    res = []
+    nesteds.reverse_each do |o| 
+      res << nesteds.join('::').constantize
+      nesteds.pop
+    end
+    res
+  end
+end
 
-  class << self
-    def protocol(protocol=nil) 
-      @protocol = protocol ? protocol : @protocol  
+class Class
+  include ClassNesting
+end
+
+module StateProcessor
+  extend ActiveSupport::Concern
+
+  module ClassMethods
+    def protocol(proto = nil)
+      debugger
+      if proto then
+        @protocol = proto
+      else
+        #the first one is always ourselves, so skip it.
+        @protocol = nesting[1..-1].each do |cl|
+           protocol = cl.protocol
+           # cause that's how i roll.
+           break protocol if protocol 
+        end
+        @protocol = NilProtocol unless @protocol
+      end
     end
    
     def key(key=nil)
@@ -22,6 +56,10 @@ class StateProcessor
     
     def worker(worker = nil)
       @worker = worker ? worker : @worker
+    end
+
+    def test
+      'test'
     end
 
     def commands options={}, &block
@@ -39,4 +77,5 @@ class StateProcessor
       end
     end
   end
+
 end

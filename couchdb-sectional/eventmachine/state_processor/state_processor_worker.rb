@@ -1,4 +1,4 @@
-class StateProcessor
+module StateProcessor
   module StateProcessorWorker
     include StateProcessor::StateProcessorExceptions
 

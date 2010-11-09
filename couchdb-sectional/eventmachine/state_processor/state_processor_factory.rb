@@ -3,7 +3,7 @@ require 'active_support/core_ext'
 require 'forwardable'
 require 'continuation'
 
-class StateProcessor
+module StateProcessor
   class StateProcessorFactory
     include StateProcessorExceptions
 
@@ -62,7 +62,7 @@ class StateProcessor
             top = opts.has_key?(:top) ? opts[:top] : false
             debugger
             begin
-              state_class = StateProcessorFactory[state]
+              state_class = StateProcessorFactory[state] 
             rescue StateProcessorInvalidState
               raise unless block_given?
               state = yield
@@ -173,7 +173,7 @@ class StateProcessor
           
           def inspect
              hex_id = "%x" % self.object_id << 1
-             "#<#{self.class}:0x#{hex_id} protocol: #{self.class.protocol}>"
+             "#<#{self.class.worker.to_s}Processor:0x#{hex_id} protocol: #{self.class.protocol}>"
           end
         end
         StateProcessorFactory.add_state klass, class_name.underscore.intern 
