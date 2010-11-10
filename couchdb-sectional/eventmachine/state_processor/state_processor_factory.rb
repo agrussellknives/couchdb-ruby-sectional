@@ -34,6 +34,11 @@ module StateProcessor
             attr_accessor :state
             attr_reader :commands
             attr_reader :worker
+
+            def inspect
+              hex_id = "%x" % self.object_id << 1
+              "#<#{self.worker.to_s}ProcessorClass:0x#{hex_id} protocol: #{self.protocol}>" 
+            end
           end
 
           OPTLIST.collect { |opt| attr_accessor opt }
@@ -60,7 +65,6 @@ module StateProcessor
           def switch_state state, opts = {}, &block
             protocol = opts.has_key?(:protocol) ? opts[:protocol] : self.class.protocol
             top = opts.has_key?(:top) ? opts[:top] : false
-            debugger
             begin
               state_class = StateProcessorFactory[state] 
             rescue StateProcessorInvalidState
@@ -92,13 +96,15 @@ module StateProcessor
               worker.send m, *args, &block
             else
               raise StateProcessorCannotPerformAction.new( 
-                  "Could not perform action #{m} in #{self.class} with worker #{worker.class}")
+                  "Could not perform action #{m} in #{self.class.inspect} with worker #{self.class.worker}")
             end 
           end
 
-          # A convience method for sending the current command to the worker object
+          # A convience method for sending the current command to instance of the worker object
           def execute *args, &block
-            send @command, *args, &block
+            #ha ha
+            debugger
+            self.class.worker.new.send @command, *args, &block
           end
 
           def error e

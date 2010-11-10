@@ -36,17 +36,18 @@ module StateProcessor
 
   module ClassMethods
     def protocol(proto = nil)
-      debugger
       if proto then
         @protocol = proto
       else
-        #the first one is always ourselves, so skip it.
-        @protocol = nesting[1..-1].each do |cl|
-           protocol = cl.protocol
-           # cause that's how i roll.
-           break protocol if protocol 
+        unless @protocol 
+          #the first one is always ourselves, so skip it.
+          @protocol = nesting[1..-1].each do |cl|
+             protocol = cl.protocol
+             # cause that's how i roll.
+             break protocol if protocol 
+          end || NilProtocol
         end
-        @protocol = NilProtocol unless @protocol
+        @protocol
       end
     end
    
