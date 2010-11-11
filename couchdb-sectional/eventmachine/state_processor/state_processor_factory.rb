@@ -69,6 +69,7 @@ module StateProcessor
               state_class = StateProcessorFactory[state] 
             rescue StateProcessorInvalidState
               raise unless block_given?
+              debugger
               state = yield
               #StateProcessorFactory.create state, protocol, &block
               retry 
@@ -76,17 +77,8 @@ module StateProcessor
             #TODO investigate whether flatten is appropriate here, or if we should do a single
             # level flatten, or perhaps just leave it to the calling state
             # to prepare our arguments for us.
+            debugger 
             @result = state_class.new(self,opts).process(@full_command.flatten,top) 
-          end
-
-          def context item=nil
-            if block_given?
-              yield @context
-            elsif item
-              @context[item]
-            else
-              @context
-            end
           end
 
           def method_missing(m, *args, &block)
