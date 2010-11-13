@@ -1,4 +1,3 @@
-require 'singleton'
 require 'active_support/core_ext'
 require 'forwardable'
 require 'continuation'
@@ -7,7 +6,7 @@ module StateProcessor
   class StateProcessorFactory
     include StateProcessorExceptions
 
-    OPTLIST = [:context, :command, :executed_command, :full_command, :origin, :result]  
+    OPTLIST = [ :command, :executed_command, :origin, :result]  
     
     @processors = StateProcessorList.new()
     class << self
@@ -32,8 +31,8 @@ module StateProcessor
           class << self
             attr_accessor :protocol
             attr_accessor :state
-            attr_reader :commands
-            attr_reader :worker
+            attr_accessor :commands
+            attr_accessor :worker
 
             def inspect
               hex_id = "%x" % self.object_id << 1
@@ -69,34 +68,67 @@ module StateProcessor
               state_class = StateProcessorFactory[state] 
             rescue StateProcessorInvalidState
               raise unless block_given?
-              debugger
+              # switch the worker object for the duration of the yield
+              # is that really the prettiest way to do this?
+              old_worker, self.class.worker = self.class.worker, state
               state = yield
-              #StateProcessorFactory.create state, protocol, &block
+              self.class.worker = old_worker
               retry 
             end
             #TODO investigate whether flatten is appropriate here, or if we should do a single
             # level flatten, or perhaps just leave it to the calling state
             # to prepare our arguments for us.
-            debugger 
-            @result = state_class.new(self,opts).process(@full_command.flatten,top) 
+            # actually, we should leave it to the protocol.  there should be 
+            # prep command method in the protocol
+            @result = state_class.new(self,opts).process(@command.flatten,top) 
           end
 
-          def method_missing(m, *args, &block)
-            puts "method missing called #{m}, #{args}"
-            worker = self.class.worker 
-            if worker and worker.respond_to? m
-              worker.send m, *args, &block
+          def dispatch obj, m, *args, &block
+            if obj and obj.respond_to? m
+              obj.send m, *args, &block
             else
               raise StateProcessorCannotPerformAction.new( 
                   "Could not perform action #{m} in #{self.class.inspect} with worker #{self.class.worker}")
-            end 
+            end
+          end
+          private :dispatch
+
+          # dispatches called methods to the class of the current worker object
+          def method_missing(m, *args, &block)
+            if self.class.worker.respond_to? m 
+              dispatch self.class.worker, m, *args, &block 
+            else
+              raise NameError, "undefined local variable or method `#{m}' for #{self.inspect}" 
+            end
+          end
+          
+          # a method which runs a compiled function in the context of a method
+          # used for callbacks / contiuation passing, etc.
+          def run *args, &block
+            dispatch self.class.worker.new @command, *args, &block
+          end
+          
+          # A convience method for sending the current command to an instance of the worker object
+          def execute cmd=nil, *args, &block
+            if block_given?
+              # i can't think of a reason why you'd need to pass args in if you gave
+              # it a block
+              dispatch self.class.worker.new.instance_eval(&block)
+            else
+              ex = ArgumentError.new('Execute must be passed a method name or block')
+              raise ex unless cmd.kind_of? Symbol
+              begin 
+                dispatch self.class.worker.new.send cmd, *args
+              rescue StateProcessorCannotPerformAction => e
+                # the generic exception is better in this instance
+                raise ex
+              end
+            end
           end
 
-          # A convience method for sending the current command to instance of the worker object
-          def execute *args, &block
-            #ha ha
-            debugger
-            self.class.worker.new.send @command, *args, &block
+          # call context in the worker 
+          def context &block
+            self.class.worker.context &block  
           end
 
           def error e
@@ -114,29 +146,43 @@ module StateProcessor
           def stop_with result
             @origin.call result 
           end
-          
-          def otherwise 
-            return if @executed_command
-            if block_given? 
-              yield @command, *(@full_command)
-              @executed_command = @command
-            else
-              debugger
-              raise StateProcessorDoesNotRespond, ["unknown command","unknown command #{cmd}"]
-            end
+
+          def stop_after
+            @stop_after = true
+            yield
+            @stop_after = false
           end
           
-          def on cmd
-            if cmd == @command
-              result = yield *(@full_command)
-              @executed_command = @command
+          def on *args, &block
+            #TODO, rewrite so it stores commands and does a lookup at runtime rather than
+            #running through all of the commands
+            # this is O(N) since it calls this method once for each "on" block.
+            # I could get it instead to store them in a lut, and then executed based
+            # on the value of "matched" which would be better
+            cmd = @command.dup
+            matched = args.take_while do |arg|
+              arg == cmd.shift
             end
-            @result = result.nil? ? @result : result
+            if matched == args 
+              # should I do an arity check here?
+              if block_given?
+                @command = @command - matched
+                result = yield *(args - matched)
+                @executed_command = matched 
+              else
+                # not sure this works the way it ought to
+                result = dispatch self.class.worker, matched.shift, *matched
+              end
+              @result = result.nil? ? @result : result
+              stop_with @result if @stop_after
+            end
+            @result
           end
          
           def process cmd, top=true 
-            @full_command = cmd
-            @command = cmd.shift.to_sym
+            @command = cmd
+            
+            # define the main working block
             workf = lambda do 
               begin
                 instance_exec(command,&(self.class.commands))
@@ -155,7 +201,7 @@ module StateProcessor
               end
             end
             
-            # if we are the top process, set ourselves
+            # if we are the top section, set ourselves
             # as the continuation for the rest of the
             # commands
             if top
