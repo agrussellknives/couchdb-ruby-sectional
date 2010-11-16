@@ -1,6 +1,7 @@
 require 'active_support/core_ext'
 require 'forwardable'
 require 'continuation'
+require 'fiber'
 
 module StateProcessor
   class StateProcessorFactory
@@ -38,6 +39,7 @@ module StateProcessor
               hex_id = "%x" % self.object_id << 1
               "#<#{self.worker.to_s}ProcessorClass:0x#{hex_id} protocol: #{self.protocol}>" 
             end
+            
           end
 
           OPTLIST.collect { |opt| attr_accessor opt }
@@ -96,7 +98,7 @@ module StateProcessor
           # dispatches called methods to the class of the current worker object
           def method_missing(m, *args, &block)
             if self.class.worker.respond_to? m 
-              dispatch self.class.worker, m, *args, &block 
+              dispatch(self.class.worker, m, *args, &block)
             else
               raise NameError, "undefined local variable or method `#{m}' for #{self.inspect}" 
             end
@@ -105,7 +107,10 @@ module StateProcessor
           # a method which runs a compiled function in the context of a method
           # used for callbacks / contiuation passing, etc.
           def run *args, &block
-            dispatch self.class.worker.new @command, *args, &block
+            @current_command.map do |c|
+              args.unshift c.to_sym
+            end
+            self.class.worker.new.run *args, &block         
           end
           
           # A convience method for sending the current command to an instance of the worker object
@@ -113,12 +118,12 @@ module StateProcessor
             if block_given?
               # i can't think of a reason why you'd need to pass args in if you gave
               # it a block
-              dispatch self.class.worker.new.instance_eval(&block)
+              dispatch(self.class.worker.new.instance_eval(&block))
             else
               ex = ArgumentError.new('Execute must be passed a method name or block')
               raise ex unless cmd.kind_of? Symbol
               begin 
-                dispatch self.class.worker.new.send cmd, *args
+                dispatch(self.class.worker.new, cmd, *args)
               rescue StateProcessorCannotPerformAction => e
                 # the generic exception is better in this instance
                 raise ex
@@ -126,13 +131,43 @@ module StateProcessor
             end
           end
 
+          def on *args, &block
+            #TODO, rewrite so it stores commands and does a lookup at runtime rather than
+            #running through all of the commands
+            # this is O(N) since it calls this method once for each "on" block.
+            # I could get it instead to store them in a lut, and then executed based
+            # on the value of "matched" which would be better
+            cmd = @command.dup
+            # i want it to match only in order, so we take_while instead of a intersection
+            matched = args.take_while do |arg|
+              arg == cmd.shift.to_sym
+            end
+            if matched == args 
+              # should I do an arity check here?
+              if block_given?
+                @current_command = @command.shift(matched.size)
+                result = yield *(cmd)
+                @command.unshift(@current_command)
+                @executed_commands = @current_command.dup
+                @current_command = nil
+              else
+                # not sure this works the way it ought to
+                result = dispatch(self.class.worker, matched.shift, *matched)
+              end
+              @result = result.nil? ? @result : result
+              stop_with @result if @stop_after
+            end
+            @result
+          end
+        
           # call context in the worker 
           def context &block
             self.class.worker.context &block  
           end
 
-          def error e
-            $stderr.puts e 
+          # call context in the worker, supressing the overwrite exception
+          def context! &block
+            self.class.worker.context! &block
           end
 
           def exit e
@@ -147,74 +182,63 @@ module StateProcessor
             @origin.call result 
           end
 
+          def resume_here
+          end
+
           def stop_after
             @stop_after = true
             yield
             @stop_after = false
           end
-          
-          def on *args, &block
-            #TODO, rewrite so it stores commands and does a lookup at runtime rather than
-            #running through all of the commands
-            # this is O(N) since it calls this method once for each "on" block.
-            # I could get it instead to store them in a lut, and then executed based
-            # on the value of "matched" which would be better
-            cmd = @command.dup
-            matched = args.take_while do |arg|
-              arg == cmd.shift
-            end
-            if matched == args 
-              # should I do an arity check here?
-              if block_given?
-                @command = @command - matched
-                result = yield *(args - matched)
-                @executed_command = matched 
-              else
-                # not sure this works the way it ought to
-                result = dispatch self.class.worker, matched.shift, *matched
-              end
-              @result = result.nil? ? @result : result
-              stop_with @result if @stop_after
-            end
-            @result
+
+          def consume_command! num=1
+            puts 'command consumed'
+            @command.shift(num)
           end
-         
-          def process cmd, top=true 
+
+          # simple stub implementation error handle.
+          def error e
+            $stderr.puts e 
+          end
+ 
+          def process cmd, top=true
+            puts self.inspect 
             @command = cmd
             
-            # define the main working block
-            workf = lambda do 
-              begin
-                instance_exec(command,&(self.class.commands))
-              rescue LocalJumpError => e
-                return e.exit_value if e.reason == :return
-              rescue StateProcessorError => e
-                raise e
-              rescue StandardError => e
-                if methods.include? :report_error then
-                  puts 'calling report error'
-                  report_error e
-                else
-                  puts 'default error handler'
-                  error e
+                # define the main working block
+                workf = lambda do 
+                  begin
+                    instance_exec(command,&(self.class.commands))
+                  rescue LocalJumpError => e
+                    return e.exit_value if e.reason == :return
+                  rescue StateProcessorError => e
+                    raise e
+                  rescue StandardError => e
+                    if methods.include? :report_error then
+                      puts 'calling report error'
+                      report_error e
+                    else
+                      puts 'default error handler'
+                      error e
+                    end
+                  end
                 end
-              end
-            end
-            
-            # if we are the top section, set ourselves
-            # as the continuation for the rest of the
-            # commands
-            if top
-              @result = callcc do |here|
-                @origin = here 
-                workf.call
-              end
-            else
-              workf.call
-            end
-            @result
+                
+                # if we are the top section, set ourselves
+                # as the continuation for the rest of our sub-states
+                # i wonder if throw catch would be easier to understand here.
+                if top
+                  @result = callcc do |here|
+                    @origin = here 
+                    workf.call
+                  end
+                else
+                  workf.call
+                end
+                #-- CALLING THE ORIGIN CONTIUATION WILL COME BACK TO HERE --#
+                @result
           end
-          
+         
           def inspect
              hex_id = "%x" % self.object_id << 1
              "#<#{self.class.worker.to_s}Processor:0x#{hex_id} protocol: #{self.class.protocol}>"

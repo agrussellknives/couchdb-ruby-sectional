@@ -1,28 +1,12 @@
 require 'eventmachine'
 
-module Enumerable
-  def recursive_symbolize
-    inject(self.class.new) do |memo,(k,v)|
-      begin
-        if memo.respond_to? :<<
-          memo << k.recursive_symbolize
-        else
-          new_key = k.to_sym rescue k
-          new_val = v.recursive_symbolize rescue v
-          memo.store(new_key,new_val)
-        end
-      rescue NoMethodError
-        memo << k.to_sym rescue k
-      end
-      memo
-    end
-  end
-end
+require_relative './state_processor'
 
 module CouchDBQueryServerProtocol
   include EM::Protocols::LineText2
   
   @run = nil
+  attr_accessor :state_processor_root
 
   def unbind
     #TODO change this to stop the particular server, but not
@@ -31,15 +15,15 @@ module CouchDBQueryServerProtocol
   end
   
   def receive_line data
+    puts self.inspect
     begin
-     command = (JSON.parse data if data).recursive_symbolize
+     command = (JSON.parse data if data)
     rescue JSON::ParserError => e
       #an unparseable command - make "run" go fatal.
       command = [""]
     rescue => e
       raise e
     end
-    p command
     @run.call(command)
   end
   

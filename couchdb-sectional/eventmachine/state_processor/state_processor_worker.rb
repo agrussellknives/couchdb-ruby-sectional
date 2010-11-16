@@ -32,8 +32,10 @@ module StateProcessor
     end
 
     def initialize
-      context = self.class.context
-      instance_eval &(context) if context
+      self.class.nesting.each do |nest|
+        cont = nest.context
+        instance_eval &cont if cont
+      end
     end
 
     # you can use this within "execute" or the "run" implementation to

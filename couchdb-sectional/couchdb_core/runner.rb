@@ -4,15 +4,16 @@ module CouchDB
     class HaltedFunction < StandardError; end
     class FatalError < StandardError; end
 
-    def initialize(func)
+    def initialize(func, worker = self)
       @func = func
+      @worker = worker
     end
     
     def run(*args)
       begin
         # return the raw error from sandbox if our proc hasn't compiled.
         return @func unless @func.is_a?(Proc)
-        results = instance_exec *args, &@func
+        results = @worker.instance_exec *args, &@func
         if @results then @results else results end
       rescue HaltedFunction => e
         $error.puts(e) if CouchDB.debug
