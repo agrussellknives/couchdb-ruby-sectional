@@ -185,7 +185,7 @@ module StateProcessor
           def resume_here
           end
 
-          def stop_after
+          def return_after 
             @stop_after = true
             yield
             @stop_after = false
@@ -210,7 +210,9 @@ module StateProcessor
                   begin
                     instance_exec(command,&(self.class.commands))
                   rescue LocalJumpError => e
-                    return e.exit_value if e.reason == :return
+                    if e.reason == :return
+                      @origin.call e.exit_value
+                    end
                   rescue StateProcessorError => e
                     raise e
                   rescue StandardError => e
@@ -221,6 +223,9 @@ module StateProcessor
                       puts 'default error handler'
                       error e
                     end
+                  rescue e
+                    puts 'rescued everything!'
+                    debugger
                   end
                 end
                 

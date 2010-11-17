@@ -18,10 +18,10 @@ module CouchDB
       begin
         value = run(string)
         unless value.is_a?(Proc)
-          value = ["error", "compilation_error", "expression does not eval to a proc: #{string}"]
+          value = [:error, "compilation_error", "expression does not eval to a proc: #{string}"]
         end
       rescue SyntaxError => e
-        value = ["error","compilation_error","#{e.class.name}: #{e.message}"]
+        value = [:error,"compilation_error","#{e.class.name}: #{e.message}"]
       end
       value
     end

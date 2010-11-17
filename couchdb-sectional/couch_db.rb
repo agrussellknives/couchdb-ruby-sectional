@@ -9,7 +9,7 @@ require 'eventmachine'
 require_relative 'eval_debugger'
 
 # couchdb requires
-%w(runner sandbox arguments).each {|mod| require_relative "couchdb_core/#{mod}" }
+%w(exceptions runner sandbox arguments).each {|mod| require_relative "couchdb_core/#{mod}" }
 
 #event machine
 %w(query_server_protocol state_processor).each {|mod| require_relative "eventmachine/#{mod}" } 

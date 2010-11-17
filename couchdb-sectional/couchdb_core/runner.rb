@@ -1,14 +1,12 @@
 module CouchDB
   class Runner
-   
-    class HaltedFunction < StandardError; end
-    class FatalError < StandardError; end
-
+    include CouchDB::Exceptions
+    
     def initialize(func, worker = self)
       @func = func
       @worker = worker
     end
-    
+   
     def run(*args)
       begin
         # return the raw error from sandbox if our proc hasn't compiled.
@@ -17,32 +15,18 @@ module CouchDB
         if @results then @results else results end
       rescue HaltedFunction => e
         $error.puts(e) if CouchDB.debug
-        @error
+        e.message 
+      rescue FatalError => e
+        $error.puts(e) if CouchDB.debug
+        # this is a little messy, since we subvert all of our complicated
+        # abstraction and just kill the bastard.
+        CouchDB.write e.message
+        CouchDB.exit
       rescue => e
-        log [e.class.to_s,e.message]
-        (log('Waiting for debugger....'); debugger) if CouchDB.stop_on_error
+        CouchDB.log [e.class.to_s,e.message]
+        (CouchDB.log('Waiting for debugger....'); debugger) if CouchDB.stop_on_error
         results = []
       end
-    end
-
-    def throw(error, *message)
-      begin
-        @error = if [:error, :fatal, "error", "fatal"].include?(error)
-          errorMessage = ["error", message].flatten
-          raise FatalError, errorMessage if [:fatal,"fatal"].include?(error)
-          errorMessage
-        else
-          {error => message.join(', ')}
-        end
-        raise HaltedFunction
-      rescue FatalError => e
-        CouchDB.write(e.message)
-        CouchDB.exit
-      end
-    end
-
-    def log(thing)
-      CouchDB.write(["log", thing.to_json])
     end
 
   end
