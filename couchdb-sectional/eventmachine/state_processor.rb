@@ -6,6 +6,7 @@ require_relative "state_processor/state_processor_exceptions"
 require_relative "state_processor/state_processor_list"
 require_relative "state_processor/state_processor_factory"
 require_relative "state_processor/state_processor_worker"
+require_relative "state_processor/state_processor_section"
 
 #TODO - fix this to require all protocols dynamically
 require_relative "nil_protocol"
@@ -78,5 +79,4 @@ module StateProcessor
       end
     end
   end
-
 end

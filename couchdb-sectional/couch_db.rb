@@ -46,6 +46,7 @@ module CouchDB
     EventMachine::run do
       @pipe = EM.attach $stdin, StateProcessor::StateProcessorFactory[state].protocol do |pipe|
         #pipe is the anonymous recieving class that EventMachine creates
+        puts pipe
         pipe.state_processor_root = StateProcessor::StateProcessorFactory[state].new
         pipe.run do |command|
           begin

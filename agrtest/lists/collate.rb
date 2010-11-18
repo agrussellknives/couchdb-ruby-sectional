@@ -1,6 +1,7 @@
 lambda do |head,req|
   start({:headers => {:content_type => 'application/json'}})
-  debugger
+      end
+                        dquery server normal case ddoc listebugger if result.is_a? Hash
   accumulator = {}
   thing = ""
   while row = get_row do
