@@ -17,7 +17,7 @@ module StateProcessor
       end
     end
     
-    OPTLIST = [ :command, :executed_command, :origin, :result]  
+    OPTLIST = [ :command, :executed_command, :origin, :result, :callingstate, :current_command ]
     
     included do 
       OPTLIST.collect { |opt| attr_accessor opt }
@@ -35,12 +35,26 @@ module StateProcessor
         memo
       end
     end
+    
+    def callchain
+      Enumerator.new do |y|
+        if @callingstate
+          call = @callingstate 
+          while call do
+            y.yield call 
+            call = call.callingstate
+          end
+        end
+      end
+    end
 
     def initialize callingstate=nil, opts = {}
       # who knew - you can't call an attr_accessor from initialize
       self.options = callingstate.options.merge opts if callingstate
       @callingstate = callingstate
+      @previous_continuations = []
       @processors = {}
+      @command_block = self.class.commands
       self
     end
 
@@ -66,7 +80,10 @@ module StateProcessor
       
       # we have our state_class now - we should check to see if we've already instantiated processors
       # underneath ourselves
-      processor = unless @processors[state_class]
+      # seriously?
+      processor = if @processors.has_key?(state_class) then
+        @processors[state_class]
+      else
         @processors[state_class] = state_class.new(self,opts)
       end
       @result = processor.process(@command.flatten,top)
@@ -134,7 +151,8 @@ module StateProcessor
       if matched == args 
         if block_given?
           #TODO - implement arity checking.
-          @current_command = @command.shift(matched.size)
+          (@current_command = @command.shift(matched.size)) if matched.size > 0
+          puts @current_command
           result = yield *(cmd)
           @command.unshift(@current_command)
           @executed_commands = @current_command.dup
@@ -159,6 +177,8 @@ module StateProcessor
       self.class.worker.context! &block
     end
 
+
+    # i am not exactly sure you should ever do this.
     def exit e
       raise StateProcessorExit, e
     end
@@ -167,8 +187,15 @@ module StateProcessor
       self.class.send :define_method, :report_error, &block
     end
 
+    # equivalent to "return"
     def stop_with result
-      @origin.call result 
+      e = LocalJumpError.new
+      #subvert! cheat! 
+      e.instance_eval do
+        @reason = :return
+        @exit_value = result
+      end
+      raise e 
     end
 
     def resume_here
@@ -179,10 +206,36 @@ module StateProcessor
       yield
       @stop_after = false
     end
+    alias :stopping_after :return_after
 
-    def pass
-      parents = self.class.worker.nesting
-      # set the
+    def pass result, &block
+      # reset the contiuation on the call chain, so the next 
+      # "process" call will invoke our own contiuation
+      # if a block is given we set the contiuation to
+      # execute that block
+      #
+      #if block_given?
+      #  # i need to store the previous command block so i can
+      #  @result = callcc { |cc| @pass_continuation = cc } 
+      #  instance_exec(@command,block)
+      #end
+      
+      callchain.each do |c|
+        c.instance_exec @pass_continuation do |cc|
+          @previous_continuations << @pass_continuation
+          @pass_continuation = cc
+        end
+      end
+      stop_with result
+    end
+
+    def reset_continuations
+      callchain.each do |c|
+        c.instance_exec do |cc|
+          pc = @previous_continuations.pop
+          @pass_continuation = pc
+        end
+      end
     end
 
     def consume_command! num=1
@@ -198,49 +251,47 @@ module StateProcessor
     def process cmd, top=true
       puts self.inspect 
       @command = cmd
-      
-          # define the main working block
-          workf = lambda do
-            @pass_continuation.call if @pass_continuation
-            begin
-              loop do
-                @result = callcc do |cc|
-                  instance_exec(command,&(self.class.commands))
-                  @pass_continuation = cc  
-                end
-              end
-            rescue LocalJumpError => e
-              if e.reason == :return
-                @origin.call e.exit_value
-              end
-            rescue StateProcessorError => e
-              raise e
-            rescue StandardError => e
-              if methods.include? :report_error then
-                puts 'calling report error'
-                report_error e
-              else
-                puts 'default error handler'
-                error e
-              end
-            rescue e
-              puts 'rescued everything!'
-            end
+      @pass_continuation.call if @pass_continuation
+      # define the main working block
+      workf = lambda do 
+        begin
+          @result = callcc { |cc| @pass_continuation = cc }
+          # -- CALLING OUR OWN PASS CONTIUATION WILL JUMP TO HERE --#
+          # it should NOT be possible to reset the TOP between calls. #
+          instance_exec(@command,&(@command_block))
+        rescue LocalJumpError => e
+          if e.reason == :return 
+            reset_continuations 
+            @origin.call e.exit_value
           end
-          
-          # if we are the top section, set ourselves
-          # as the continuation for the rest of our sub-states
-          # i wonder if throw catch would be easier to understand here.
-          if top
-            @result = callcc do |here|
-              @origin = here 
-              workf.call
-            end
+        rescue StateProcessorError => e
+          raise e
+        rescue StandardError => e
+          if methods.include? :report_error then
+            puts 'calling report error'
+            report_error e
           else
-            workf.call
+            puts 'default error handler'
+            error e
           end
-          #-- CALLING THE ORIGIN CONTIUATION WILL COME BACK TO HERE --#
-          @result
+        rescue e
+          puts 'rescued everything!'
+        end
+      end
+      
+      # if we are the top section, set ourselves
+      # as the continuation for the rest of our sub-states
+      # i wonder if throw catch would be easier to understand here.
+      if top
+        @result = callcc do |here|
+          @origin = here 
+          workf.call
+        end
+      else
+        workf.call
+      end
+      #-- CALLING THE ORIGIN CONTIUATION WILL COME BACK TO HERE --#
+      @result
     end
    
     def inspect
