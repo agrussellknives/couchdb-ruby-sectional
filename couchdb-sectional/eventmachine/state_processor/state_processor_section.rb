@@ -1,7 +1,10 @@
 module StateProcessor
   module StateProcessorSection
     include StateProcessor::StateProcessorExceptions
+    include StateProcessor::StateProcessorMatchConstant
     extend ActiveSupport::Concern  
+   
+    class NoMatchException < StandardError; end
 
     module ClassMethods
       class << self
@@ -18,6 +21,8 @@ module StateProcessor
     end
     
     OPTLIST = [ :command, :executed_command, :origin, :result, :callingstate, :current_command ]
+
+    OPERATORS = [:_, :*]
     
     included do 
       OPTLIST.collect { |opt| attr_accessor opt }
@@ -47,6 +52,7 @@ module StateProcessor
         end
       end
     end
+
 
     def initialize callingstate=nil, opts = {}
       # who knew - you can't call an attr_accessor from initialize
@@ -137,33 +143,68 @@ module StateProcessor
       end
     end
 
+     
+    def _(arg=nil)
+      return STATE_PROCESSOR_MATCH unless arg
+      lambda do |a| 
+        break a == arg ? STATE_PROCESSOR_MATCH : STATE_PROCESSOR_NOMATCH 
+      end
+    end
+
+    def _!(arg=nil)
+      return STATE_PROCESSOR_MATCH unless arg
+      lambda do |a|
+        break a == arg ? STATE_PROCESSOR_CONSUME : STATE_PROCESSOR_NOMATCH 
+      end
+    end
+
+    def match_args(args,cmd)
+      matches = []
+      nomatch_ex = NoMatchException.new
+      cmd.each_with_index do |i,arg|
+        if args[i] == STATE_PROCESSOR_MATCH 
+          matches << arg
+        elsif arg != arg[i]
+          raise nomatchex
+        else 
+          match = args[i][arg] rescue nil 
+          if match == STATE_PROCESSOR_MATCH 
+            matches << arg
+          elsif match == STATE_PROCESSOR_CONSUME
+            matches << nil
+          end
+        end
+      end
+    end
+
     def on *args, &block
       #TODO, rewrite so it stores commands and does a lookup at runtime rather than
       #running through all of the commands
       # this is O(N) since it calls this method once for each "on" block.
       # I could get it instead to store them in a lut, and then executed based
       # on the value of "matched" which would be better
-      cmd = @command.dup
-      # i want it to match only in order, so we take_while instead of a intersection
-      matched = args.take_while do |arg|
-        arg == cmd.shift.to_sym
+      
+      debugger 
+      match_args(args,@command.dup)
+       
+      if block_given?
+        #TODO - implement arity checking.
+        (@current_command = @command.shift(matched.size)) if matched.size > 0
+        puts @current_command
+        result = yield *(cmd)
+        @command.unshift(@current_command)
+        @executed_commands = @current_command.dup
+        @current_command = nil
+      else
+        # not sure this works the way it ought to
+        result = dispatch(self.class.worker, matched.shift, *matched)
       end
-      if matched == args 
-        if block_given?
-          #TODO - implement arity checking.
-          (@current_command = @command.shift(matched.size)) if matched.size > 0
-          puts @current_command
-          result = yield *(cmd)
-          @command.unshift(@current_command)
-          @executed_commands = @current_command.dup
-          @current_command = nil
-        else
-          # not sure this works the way it ought to
-          result = dispatch(self.class.worker, matched.shift, *matched)
-        end
-        @result = result.nil? ? @result : result
-        stop_with @result if @stop_after
-      end
+      @result = result.nil? ? @result : result
+      stop_with @result if @stop_after
+      
+      # the rescue has the effect of ignoring the method body if there
+      # were no argument matches
+      rescue NoMatchException
       @result
     end
 

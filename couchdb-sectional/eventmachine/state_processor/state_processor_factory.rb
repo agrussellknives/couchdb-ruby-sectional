@@ -8,7 +8,7 @@ module StateProcessor
     include StateProcessorExceptions
 
     OPTLIST = [ :command, :executed_command, :origin, :result]  
-    
+  
     @processors = StateProcessorList.new()
     class << self
       attr_accessor :processors
