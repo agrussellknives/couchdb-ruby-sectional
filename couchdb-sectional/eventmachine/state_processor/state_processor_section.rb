@@ -6,6 +6,14 @@ module StateProcessor
    
     class NoMatchException < StandardError; end
 
+    class ArgumentMatches < Array
+      attr_reader :save
+      def initialize
+        @save = [] 
+        super
+      end
+    end
+
     module ClassMethods
       class << self
         attr_accessor :protocol
@@ -143,38 +151,65 @@ module StateProcessor
       end
     end
 
-     
+    
     def _(arg=nil)
-      return STATE_PROCESSOR_MATCH unless arg
+      return StateProcessorMatch unless arg
       lambda do |a| 
-        break a == arg ? STATE_PROCESSOR_MATCH : STATE_PROCESSOR_NOMATCH 
+        break a == arg ? StateProcessorMatch : StateProcessorNoMatch 
       end
     end
+    alias :anywhere :_
+    alias :anything :_
 
     def _!(arg=nil)
-      return STATE_PROCESSOR_MATCH unless arg
+      return StateProcessorMatch unless arg
       lambda do |a|
-        break a == arg ? STATE_PROCESSOR_CONSUME : STATE_PROCESSOR_NOMATCH 
+        break a == arg ? StateProcessorConsume : StateProcessorNoMatch 
       end
     end
+    alias :save_anywhere :_!
+    alias :save_anything :_!
 
-    def match_args(args,cmd)
-      matches = []
-      nomatch_ex = NoMatchException.new
-      cmd.each_with_index do |i,arg|
-        if args[i] == STATE_PROCESSOR_MATCH 
+    def match_args(matchlist,cmd)
+      matches = ArgumentMatches.new 
+      debugger
+      
+      match_proc,cmd_match = matchlist.partition do |m|
+        true if m.is_a? Proc
+      end
+
+      indifferent_match = lambda do |arg,match|
+        if match.is_a? Symbol
+          return arg.to_sym if arg.to_sym == match
+        else
+          return arg if arg == match
+        end
+        false
+      end
+
+      cmd_match.each_with_index do |arg,i|
+        if arg == StateProcessorMatch
+          matches << cmd[i] 
+        elsif arg == StateProcessorConsume
+          matches.save << cmd[i] 
+        elsif (mtcarg = indifferent_match.call(arg, cmd[i]))
           matches << arg
-        elsif arg != arg[i]
-          raise nomatchex
-        else 
-          match = args[i][arg] rescue nil 
-          if match == STATE_PROCESSOR_MATCH 
+        end
+      end
+
+      match_proc.each do |mp|
+        cmd.each do |c|
+          match_action = mp.call(c)
+          if match_action == StateProcessorMatch
             matches << arg
-          elsif match == STATE_PROCESSOR_CONSUME
-            matches << nil
+          elsif match_action == StateProcessorConsume
+            matches.save << arg
           end
         end
       end
+
+      ret_matches = []
+      ret_matches = matches + matches.save
     end
 
     def on *args, &block
@@ -183,29 +218,31 @@ module StateProcessor
       # this is O(N) since it calls this method once for each "on" block.
       # I could get it instead to store them in a lut, and then executed based
       # on the value of "matched" which would be better
-      
-      debugger 
-      match_args(args,@command.dup)
-       
-      if block_given?
-        #TODO - implement arity checking.
-        (@current_command = @command.shift(matched.size)) if matched.size > 0
-        puts @current_command
-        result = yield *(cmd)
-        @command.unshift(@current_command)
-        @executed_commands = @current_command.dup
-        @current_command = nil
-      else
-        # not sure this works the way it ought to
-        result = dispatch(self.class.worker, matched.shift, *matched)
-      end
-      @result = result.nil? ? @result : result
-      stop_with @result if @stop_after
-      
-      # the rescue has the effect of ignoring the method body if there
-      # were no argument matches
+      begin
+        cmd = @command.dup
+        matched = match_args(args,cmd)
+        if block_given?
+          #TODO - implement arity checking.
+          debugger
+          (@current_command = @command.shift(matched.size)) if matched.size > 0
+          puts @current_command
+          result = yield *(cmd)
+          @command.unshift(@current_command)
+          @executed_commands = @current_command.dup
+          @current_command = nil
+        else
+          # not sure this works the way it ought to
+          result = dispatch(self.class.worker, matched.shift, *matched)
+        end
+        @result = result.nil? ? @result : result
+        stop_with @result if @stop_after
       rescue NoMatchException
-      @result
+        # no match exception is always thrown unless there
+        # is an argument match
+        puts 'no match'
+      ensure 
+        @result
+      end
     end
 
     # call context in the worker 
@@ -285,6 +322,7 @@ module StateProcessor
     end
 
     # simple stub implementation error handle.
+    # we need to figure out which protocol object called me and pass it back the error
     def error e
       $stderr.puts e 
     end

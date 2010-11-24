@@ -1,3 +1,5 @@
+require 'eventmachine'
+
 module NilProtocol
   include EM::Protocols::LineText2
 

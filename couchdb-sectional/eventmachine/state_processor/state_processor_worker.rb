@@ -50,7 +50,7 @@ module StateProcessor
    
     # This is a method that you should generally implement in any worker class.  
     # It is used to implement arbitrary callbacks in the context of the worker class
-    def run
+    def run *args
       raise NotImplementedError, "You should implement the run method in your own worker class."
     end
 

@@ -35,6 +35,10 @@ end
 module StateProcessor
   extend ActiveSupport::Concern
 
+  def self.[](arg)
+    StateProcessorFactory[arg]
+  end
+
   module ClassMethods
     def protocol(proto = nil)
       if proto then
