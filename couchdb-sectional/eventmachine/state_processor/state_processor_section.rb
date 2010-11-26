@@ -5,6 +5,9 @@ module StateProcessor
     extend ActiveSupport::Concern  
    
     class NoMatchException < StandardError; end
+    class PauseProcessing < StandardError
+      attr_accessor :value
+    end
 
     class ArgumentMatches < Array
       attr_reader :save
@@ -28,7 +31,7 @@ module StateProcessor
       end
     end
     
-    OPTLIST = [ :command, :executed_command, :origin, :result, :callingstate, :current_command ]
+    OPTLIST = [ :command, :executed_command, :origin, :result, :callingstate, :current_command, :worker ]
 
     OPERATORS = [:_, :*]
     
@@ -51,6 +54,7 @@ module StateProcessor
     
     def callchain
       Enumerator.new do |y|
+        y.yield self
         if @callingstate
           call = @callingstate 
           while call do
@@ -66,9 +70,11 @@ module StateProcessor
       # who knew - you can't call an attr_accessor from initialize
       self.options = callingstate.options.merge opts if callingstate
       @callingstate = callingstate
-      @previous_continuations = []
+      @previous_states = []
       @processors = {}
       @command_block = self.class.commands
+      @previous_command_blocks = []
+      @worker = self.class.worker.new
       self
     end
 
@@ -114,11 +120,11 @@ module StateProcessor
     end
     private :dispatch
 
-    # dispatches called methods to the class of the current worker object
+    # dispatches called methods to the current worker object
     # this needs a better implementation
     def method_missing(m, *args, &block)
-      if self.class.worker.respond_to? m 
-        dispatch(self.class.worker, m, *args, &block)
+      if self.worker.respond_to? m 
+        dispatch(self.worker, m, *args, &block)
       else
         raise NameError, "undefined local variable or method `#{m}' for #{self.inspect}" 
       end
@@ -130,7 +136,7 @@ module StateProcessor
       @current_command.map do |c|
         args.unshift c.to_sym
       end
-      self.class.worker.new.run *args, &block         
+      self.worker.run *args, &block         
     end
     
     # A convience method for sending the current command to an instance of the worker object
@@ -138,15 +144,14 @@ module StateProcessor
       if block_given?
         # i can't think of a reason why you'd need to pass args in if you gave
         # it a block
-        dispatch(self.class.worker.new.instance_eval(&block))
+        dispatch(self.class.worker.instance_eval(&block))
       else
         ex = ArgumentError.new('Execute must be passed a method name or block')
         raise ex unless cmd.kind_of? Symbol
         begin 
-          dispatch(self.class.worker.new, cmd, *args)
+          dispatch(self.class.worker, cmd, *args)
         rescue StateProcessorCannotPerformAction => e
-          # the generic exception is better in this instance
-          raise ex
+          raise
         end
       end
     end
@@ -172,7 +177,6 @@ module StateProcessor
 
     def match_args(matchlist,cmd)
       matches = ArgumentMatches.new 
-      debugger
       
       match_proc,cmd_match = matchlist.partition do |m|
         true if m.is_a? Proc
@@ -210,39 +214,51 @@ module StateProcessor
 
       ret_matches = []
       ret_matches = matches + matches.save
+      raise NoMatchException unless ret_matches.size > 0
+      ret_matches 
     end
+    private :match_args
 
+    def set_executed_commands
+      @command.unshift(*@current_command)
+      @executed_commands = @current_command.dup
+      @current_command = nil
+    end 
+    private :set_executed_commands
+  
     def on *args, &block
       #TODO, rewrite so it stores commands and does a lookup at runtime rather than
       #running through all of the commands
       # this is O(N) since it calls this method once for each "on" block.
       # I could get it instead to store them in a lut, and then executed based
       # on the value of "matched" which would be better
-      begin
-        cmd = @command.dup
+      #
+      #
+      # REFACTOR
+      @previous_command_blocks << @command_block
+      @command_block = block 
+      
+      cmd = @command.dup
+      begin 
         matched = match_args(args,cmd)
+        raise NoMatchException unless matched
+        (@current_command = @command.shift(matched.size)) if matched.size > 0
         if block_given?
-          #TODO - implement arity checking.
-          debugger
-          (@current_command = @command.shift(matched.size)) if matched.size > 0
-          puts @current_command
-          result = yield *(cmd)
-          @command.unshift(@current_command)
-          @executed_commands = @current_command.dup
-          @current_command = nil
+          raise NoMatchException unless block.arity == @command.size 
+          result = yield *(@command)
+          set_executed_commands
         else
           # not sure this works the way it ought to
-          result = dispatch(self.class.worker, matched.shift, *matched)
+          result = dispatch(self.worker, 
+            (@current_command * '_').to_sym, *(@command))
         end
         @result = result.nil? ? @result : result
         stop_with @result if @stop_after
-      rescue NoMatchException
-        # no match exception is always thrown unless there
-        # is an argument match
-        puts 'no match'
-      ensure 
-        @result
+      rescue NoMatchException => e
+        @command.unshift *(@current_command)
       end
+      @command_block = @previous_command_blocks.pop
+      @result
     end
 
     # call context in the worker 
@@ -276,9 +292,6 @@ module StateProcessor
       raise e 
     end
 
-    def resume_here
-    end
-
     def return_after 
       @stop_after = true
       yield
@@ -287,37 +300,35 @@ module StateProcessor
     alias :stopping_after :return_after
 
     def pass result, &block
-      # reset the contiuation on the call chain, so the next 
-      # "process" call will invoke our own contiuation
-      # if a block is given we set the contiuation to
-      # execute that block
-      #
-      #if block_given?
-      #  # i need to store the previous command block so i can
-      #  @result = callcc { |cc| @pass_continuation = cc } 
-      #  instance_exec(@command,block)
-      #end
       
       callchain.each do |c|
-        c.instance_exec @pass_continuation do |cc|
-          @previous_continuations << @pass_continuation
-          @pass_continuation = cc
+        c.instance_exec @current_state do |cs|
+          @previous_states << @current_state
+          @current_state = cs
         end
       end
-      stop_with result
+      # next time, control will be passed to our calling block or our block
+      @command_block = if block_given? then block else @previous_command_blocks.pop end
+      set_executed_commands
+        
+      # unwind to the command block 
+      throw :pause_processing, result
     end
 
-    def reset_continuations
+    def reset_states
+      #called by return to clear internal block stock
       callchain.each do |c|
-        c.instance_exec do |cc|
-          pc = @previous_continuations.pop
-          @pass_continuation = pc
+        c.instance_exec do
+          # go to the front of the line!
+          @command_block = @previous_command_blocks.first
+          @previous_command_blocks = []
+          ps = @previous_states.pop
+          @current_state = ps
         end
       end
     end
 
     def consume_command! num=1
-      puts 'command consumed'
       @command.shift(num)
     end
 
@@ -328,20 +339,35 @@ module StateProcessor
     end
 
     def process cmd, top=true
-      puts self.inspect 
+      @executed_commands = nil
+      puts cmd 
       @command = cmd
-      @pass_continuation.call if @pass_continuation
-      # define the main working block
+
+     # define the main working block
       workf = lambda do 
         begin
-          @result = callcc { |cc| @pass_continuation = cc }
-          # -- CALLING OUR OWN PASS CONTIUATION WILL JUMP TO HERE --#
-          # it should NOT be possible to reset the TOP between calls. #
-          instance_exec(@command,&(@command_block))
+          unless @current_state 
+            @current_state = Fiber.new do
+              loop do
+                # this makes the stack unwind to the top of the current command block
+                @result = catch :pause_processing do 
+                  @result = instance_exec(@command,&(@command_block))
+                end
+                raise StateProcessorDoesNotRespond unless @executed_commands 
+                Fiber.yield @result
+              end
+            end
+          end
+          @current_state.resume
+        rescue FiberError
+          error "dead fiber"
+          @current_state = false
+          retry
         rescue LocalJumpError => e
-          if e.reason == :return 
-            reset_continuations 
-            @origin.call e.exit_value
+          if e.reason == :return
+            reset_states
+            set_executed_commands unless @executed_commands
+            throw :stop_processing, e.exit_value 
           end
         rescue StateProcessorError => e
           raise e
@@ -353,8 +379,11 @@ module StateProcessor
             puts 'default error handler'
             error e
           end
-        rescue e
-          puts 'rescued everything!'
+        rescue => e
+          # cleanup
+          reset_states rescue nil
+          set_executed_commands rescue nil
+          raise
         end
       end
       
@@ -362,14 +391,13 @@ module StateProcessor
       # as the continuation for the rest of our sub-states
       # i wonder if throw catch would be easier to understand here.
       if top
-        @result = callcc do |here|
-          @origin = here 
+        @result = catch :stop_processing do 
           workf.call
         end
       else
-        workf.call
+        @result = workf.call
       end
-      #-- CALLING THE ORIGIN CONTIUATION WILL COME BACK TO HERE --#
+      #-- RAISING STOP PROCESSING WILL COME BACK TO HERE--#
       @result
     end
    
