@@ -73,6 +73,7 @@ module StateProcessor
       @previous_states = []
       @processors = {}
       @command_block = self.class.commands
+      @executed_command = []
       @previous_command_blocks = []
       @worker = self.class.worker.new
       self
@@ -219,13 +220,6 @@ module StateProcessor
     end
     private :match_args
 
-    def set_executed_commands
-      @command.unshift(*@current_command)
-      @executed_commands = @current_command.dup
-      @current_command = nil
-    end 
-    private :set_executed_commands
-  
     def on *args, &block
       #TODO, rewrite so it stores commands and does a lookup at runtime rather than
       #running through all of the commands
@@ -244,7 +238,7 @@ module StateProcessor
         raise NoMatchException unless matched
         (@current_command = @command.shift(matched.size)) if matched.size > 0
         if block_given?
-          raise NoMatchException unless block.arity == @command.size 
+          raise NoMatchException if @arity_match && block.arity != @command.size 
           result = yield *(@command)
           set_executed_commands
         else
@@ -276,7 +270,7 @@ module StateProcessor
     def exit e
       raise StateProcessorExit, e
     end
-   
+ 
     def on_error error=nil, &block
       self.class.send :define_method, :report_error, &block
     end
@@ -292,10 +286,24 @@ module StateProcessor
       raise e 
     end
 
+    def arity_match
+      begin 
+        @arity_match = true
+        yield
+      ensure
+        @arity_match = false
+      end
+    end
+    alias :matching_arity :arity_match
+      
+
     def return_after 
-      @stop_after = true
-      yield
-      @stop_after = false
+      begin
+        @stop_after = true
+        yield
+      ensure
+        @stop_after = false
+      end
     end
     alias :stopping_after :return_after
 
@@ -327,11 +335,19 @@ module StateProcessor
         end
       end
     end
+    private :reset_states
 
     def consume_command! num=1
       @command.shift(num)
     end
 
+    def set_executed_commands
+      @command.unshift(*@current_command)
+      (@executed_commands << @current_command.shift) if @current_command
+      @current_command = nil
+    end 
+    private :set_executed_commands
+  
     # simple stub implementation error handle.
     # we need to figure out which protocol object called me and pass it back the error
     def error e
@@ -339,7 +355,7 @@ module StateProcessor
     end
 
     def process cmd, top=true
-      @executed_commands = nil
+      @executed_commands = []
       puts cmd 
       @command = cmd
 
@@ -353,7 +369,7 @@ module StateProcessor
                 @result = catch :pause_processing do 
                   @result = instance_exec(@command,&(@command_block))
                 end
-                raise StateProcessorDoesNotRespond unless @executed_commands 
+                raise StateProcessorDoesNotRespond unless @executed_commands.size > 0
                 Fiber.yield @result
               end
             end
@@ -366,7 +382,7 @@ module StateProcessor
         rescue LocalJumpError => e
           if e.reason == :return
             reset_states
-            set_executed_commands unless @executed_commands
+            set_executed_commands 
             throw :stop_processing, e.exit_value 
           end
         rescue StateProcessorError => e
@@ -379,17 +395,18 @@ module StateProcessor
             puts 'default error handler'
             error e
           end
+        rescue StateProcessorDoesNotRespond => e
+          reset_states rescue nil
+          raise e
         rescue => e
-          # cleanup
+          error "some unknown error" 
           reset_states rescue nil
           set_executed_commands rescue nil
-          raise
+          raise e
+        # perhaps i could use an ensure here to reset_states and set_executed
         end
       end
       
-      # if we are the top section, set ourselves
-      # as the continuation for the rest of our sub-states
-      # i wonder if throw catch would be easier to understand here.
       if top
         @result = catch :stop_processing do 
           workf.call

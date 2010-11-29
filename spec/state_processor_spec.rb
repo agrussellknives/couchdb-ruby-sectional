@@ -83,20 +83,26 @@ class SimpleStateProcessor
 
     end
 
-    on :arity_match do |a,b,c|
-      return "you shouldn't ever see me"
+    matching_arity do
+      on :arity_match do |a,b,c|
+        return "you shouldn't ever see me"
+      end
+
+      on :arity_match do |a,b|
+        return "2 params #{a},#{b}"
+      end
+
+      on :arity_match do |a|
+        return "1 param #{a}"
+      end
+
+      on :arity_match do
+        return "i should never be run"
+      end
     end
 
-    on :arity_match do |a,b|
-      return "2 params #{a},#{b}"
-    end
-
-    on :arity_match do |a|
-      return "1 param #{a}"
-    end
-
-    on :arity_match do
-      return "i should never be run"
+    on :arity_no_match do
+      return "arity no match"
     end
     
     on :double_match do
@@ -112,11 +118,12 @@ class SimpleStateProcessor
 
     on :arg1 do
 
-      on :arg2 do
+      on :arg2 do 
+        debugger
         on :arg3 do
           return "arg3"
         end
-        on :arg3b do |a|
+        on :arg4 do |a|
           return a
         end
 
@@ -192,11 +199,16 @@ describe SimpleStateProcessor, 'simple matching' do
       StateProcessor::StateProcessorExceptions::StateProcessorDoesNotRespond)
   end
 
-  it "should do simple arity matching on the blocks" do
+  it "should do simple arity matching on blocks in an arity match block" do
     out = co << [:arity_match,1,2]
     out.should == "2 params 1,2"
     out = co << [:arity_match,1]
     out.should == "1 param 1"
+  end
+
+  it "should not do arity matching on other blocks" do
+    out = co << [:arity_no_match,1,2]
+    out.should == "arity no match"
   end
 
   it "should match a simple command" do
@@ -225,17 +237,17 @@ describe SimpleStateProcessor, 'simple matching' do
   end
 
   it "should match more than once without return" do
-    debugger
     out = co << [:double_match]
     out.should == 3 
   end
-  
+
   it "should pass arguments into a block" do
     out = co << [:pass_args, 3,4]
     out.should == 12
   end
 
   it "should accept multi-level matches" do
+    debugger
     out = co << [:arg1,:arg2,:arg3]
     out.should == "arg3"
   end
@@ -246,7 +258,7 @@ describe SimpleStateProcessor, 'simple matching' do
   end
 
   it "should accept multi-level matches with arguments" do
-    out = co << [:arg1,:arg2,:arg3b,4]
+    out = co << [:arg1,:arg2,:arg4,4]
     out.should == 4
   end
 
