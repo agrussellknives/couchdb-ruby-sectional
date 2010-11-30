@@ -39,6 +39,10 @@ module StateProcessor
     StateProcessorFactory[arg]
   end
 
+  def self.all
+    StateProcessorFactory.processors
+  end
+
   module ClassMethods
     def protocol(proto = nil)
       if proto then

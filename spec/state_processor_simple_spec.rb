@@ -1,16 +1,7 @@
 require_relative '../couchdb-sectional/eventmachine/state_processor'
 
-# got to exist - we'll open it up again later
+require_relative 'helpers'
 
-module RubyPassThroughProtocol
-  def <<(cmd)
-    @state_processor.process(cmd)
-  end
-
-  def error(cmd)
-    [:error, cmd]
-  end
-end
 
 class SimpleStateProcessor
   include StateProcessor
@@ -53,6 +44,14 @@ class SimpleStateProcessor
 
     on :simple_match do
       return true 
+    end
+
+    on :should, :not, :match, :more_specific do
+      return "shouldn't see this!"
+    end
+
+    on :should, :not do |m|
+      return m
     end
 
     on :stop_after_this do
@@ -100,7 +99,7 @@ class SimpleStateProcessor
     matching_arity do
       return_after do
         on :arity_match do |a,b,c|
-          "y]u shouldn't ever see me"
+          "you shouldn't ever see me"
         end
 
         on :arity_match do |a,b|
@@ -145,6 +144,15 @@ class SimpleStateProcessor
         return 'arg2'
       end
       
+      
+      on :pass_test5 do
+        pass "test5" do
+          on :pass_test5_2 do
+            return "ok"
+          end
+        end
+      end
+      
       on :pass_test4 do
         pass "test4"
       end
@@ -166,172 +174,189 @@ class SimpleStateProcessor
   end
 end
 
-class CommObject
-  include RubyPassThroughProtocol
-  attr_accessor :state_processor
-  def initialize
-    @state_processor = StateProcessor[SimpleStateProcessor].new
-  end
-end
 
 describe SimpleStateProcessor, 'simple matching' do
-  co = CommObject.new
+  before do
+    @co = CommObject.new SimpleStateProcessor
+  end
   
   describe "factory bits" do
     before do
-      @co2 = CommObject.new
+      @co2 = CommObject.new SimpleStateProcessor
     end
 
     it "should share classes with other state processors" do
-      @co2.state_processor.class.should == co.state_processor.class
+      @co2.state_processor.class.should == @co.state_processor.class
     end
 
     it "should new worker instances" do
-      @co2.state_processor.worker.should_not == co.state_processor.worker
+      @co2.state_processor.worker.should_not == @co.state_processor.worker
     end
 
     it "should remember the worker between calls" do
-      worker = co.state_processor.worker 
-      co << [:simple_match]
-      co.state_processor.worker.should == worker
+      worker = @co.state_processor.worker 
+      @co << [:simple_match]
+      @co.state_processor.worker.should == worker
     end
 
     it "should be able to modifiy the worker between calls" do
-      co << [:simple_worker_set_val,2]
-      out = co << [:simple_worker_get_val]
+      @co << [:simple_worker_set_val,2]
+      out = @co << [:simple_worker_get_val]
       out.should == 2
     end
 
     it "class changes should persist between several workers" do
       @co2 << [:test,88]
-      out = co << [:test]
+      out = @co << [:test]
       out.should == 88
     end
   end
 
   describe "should recover from errors gracefully" do
     it "if it doesn't respond at all it raises an error" do
-      lambda { co << [:boogety] }.should raise_error (
+      lambda { @co << [:boogety] }.should raise_error (
         StateProcessor::StateProcessorExceptions::StateProcessorDoesNotRespond)
-      debugger
-      out = co << [:simple_match]
+      out = @co << [:simple_match]
       out.should == true
     end
 
     it "errors within worker code are consumed" do
-      co << [:error_test]
-      out = co << [:simple_match]
+      @co << [:error_test]
+      out = @co << [:simple_match]
       out.should == true
     end
 
     it "trying to execute worker code that doesn't exist is an error" do
-      lambda { co << [:error_test2]}.should raise_error (
+      lambda { @co << [:error_test2]}.should raise_error (
         StateProcessor::StateProcessorExceptions::StateProcessorCannotPerformAction)
-      out = co << [:simple_match]
+      out = @co << [:simple_match]
       out.should == true
     end
 
   end
 
   it "should raise a exception on invalid messages" do
-    lambda { out = co << [:raise_exception] }.should raise_error (
+    lambda { out = @co << [:raise_exception] }.should raise_error (
       StateProcessor::StateProcessorExceptions::StateProcessorDoesNotRespond)
   end
 
   it "should do simple arity matching on blocks in an arity match block" do
-    out = co << [:arity_match,1,2]
+    out = @co << [:arity_match,1,2]
     out.should == "2 params 1,2"
-    out = co << [:arity_match,1]
+    out = @co << [:arity_match,1]
     out.should == "1 param 1"
   end
 
   it "should not do arity matching on other blocks" do
-    out = co << [:arity_no_match,1,2]
+    out = @co << [:arity_no_match,1,2]
     out.should == "arity no match"
   end
 
-  it "should match a simple command" do
-    out = co << [:simple_match]
-    out.should == true
+  describe "guard clauses" do
+    it "should match a simple command" do
+      out = @co << [:simple_match]
+      out.should == true
+    end
+
+    it "shouldn't match more specific guards" do
+      out = @co << [:should, :not, :match, :anything]     
+      out.should == :match
+    end
+
+    it "should match less specific guards" do
+      out = @co << [:should, :not, :match]
+      out.should == :match
+    end
   end
 
   it "should stop after one match in a return after block" do
-    out = co << [:stop_after_this]
+    out = @co << [:stop_after_this]
     out.should == "stop after this"
   end
 
   it "should run an instance_method with no block" do
-    out = co << [:simple_match_worker_class_call]
+    out = @co << [:simple_match_worker_class_call]
     out.should == 'simple match worker class call'
   end
 
   it "should infer the instance method name" do
-    out = co << [:infers,:method,:name]
+    out = @co << [:infers,:method,:name]
     out.should == 'ok'
   end
 
   it "should look in the worker if an unknown method is called in a block" do
-    out = co << [:call_this_in_worker]
+    out = @co << [:call_this_in_worker]
     out.should == 'call this in worker'
   end
 
   it "should call a class method using 'execute'" do
-    out = co << [:simple_match_worker_class_call]
+    out = @co << [:simple_match_worker_class_call]
     out.should == 'simple match worker class call'
   end
 
   it "should match more than once without return" do
-    out = co << [:double_match]
+    out = @co << [:double_match]
     out.should == 3 
   end
 
   it "should pass arguments into a block" do
-    out = co << [:pass_args, 3,4]
+    out = @co << [:pass_args, 3,4]
     out.should == 12
   end
 
   it "should accept multi-level matches" do
-    out = co << [:arg1,:arg2,:arg3]
+    out = @co << [:arg1,:arg2,:arg3]
     out.should == "arg3"
   end
 
   it "should fall through multi-level if no matcheds" do
-    out = co << [:arg1, :arg2]
+    out = @co << [:arg1, :arg2]
     out.should == "arg2"
   end
 
   it "should accept multi-level matches with arguments" do
-    out = co << [:arg1,:arg2,:arg4,4]
+    out = @co << [:arg1,:arg2,:arg4,4]
     out.should == 4
   end
 
   describe "it should be able to pick up where it left off" do
 
     it "after a call" do
-      out = co << [:arg1, :pass_test]
+      out = @co << [:arg1, :pass_test]
       out.should == "test"
 
-      out = co << [:pass_test2]
+      out = @co << [:pass_test2]
       out.should == "test2"
     end
 
     it "even if it's out of order" do
-      out = co << [:pass_test4]
+      out = @co << [:arg1, :pass_test]
+      out = @co << [:pass_test2]
+      out = @co << [:pass_test4]
       out.should == "test4"
     end
 
+    it "executing the pass functions block" do
+      out = @co << [:arg1,:pass_test5]
+      out.should == "test5"
+      out = @co << [:pass_test5_2]
+      out.should == "ok"
+    end
+
     it "until it gets a return" do
-      out = co << [:pass_test3]
+      out = @co << [:arg1, :pass_test]
+      out.should == "test"
+      out = @co << [:pass_test3]
       out.should == "test3"
     end
 
     it "then it shouldn't anymore" do
-      lambda {  out = co << [:arg2] }.should raise_error(
+      lambda {  out = @co << [:arg2] }.should raise_error(
         StateProcessor::StateProcessorExceptions::StateProcessorDoesNotRespond)
     end
 
     it "but it should start over" do
-      out = co << [:arg1, :arg2]
+      out = @co << [:arg1, :arg2]
       out.should == "arg2"
     end
   end

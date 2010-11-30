@@ -88,9 +88,12 @@ module StateProcessor
         raise unless block_given?
         # switch the worker object for the duration of the yield
         # is that really the prettiest way to do this?
-        old_worker, self.class.worker = self.class.worker, state
-        state = yield
-        self.class.worker = old_worker
+        #old_worker, self.class.worker = self.class.worker, state
+        
+        # generally, if the block was given it's suppling "here only" subcommands
+        state_class = state.class_eval &block
+        #state = yield
+        #self.class.worker = old_worker
         retry 
       end
       #TODO investigate whether flatten is appropriate here, or if we should do a single
@@ -140,7 +143,7 @@ module StateProcessor
       self.worker.run *args, &block         
     end
     
-    # A convience method for sending the current command to an instance of the worker object
+    # A convience method for sending the current command to the class of the worker object
     def execute cmd=nil, *args, &block
       if block_given?
         # i can't think of a reason why you'd need to pass args in if you gave
@@ -215,7 +218,7 @@ module StateProcessor
 
       ret_matches = []
       ret_matches = matches + matches.save
-      raise NoMatchException unless ret_matches.size > 0
+      raise NoMatchException unless ret_matches.size >= matchlist.size
       ret_matches 
     end
     private :match_args
@@ -229,27 +232,43 @@ module StateProcessor
       #
       #
       # REFACTOR
+      #
       @previous_command_blocks << @command_block
       @command_block = block 
       
       cmd = @command.dup
       begin 
         matched = match_args(args,cmd)
+
+        with_current = lambda do |&cur_block|
+          begin
+            (@current_command = @command.shift(matched.size)) if matched.size > 0
+            cur_block.call 
+          ensure
+            @command.unshift *(@current_command)
+          end
+        end
+
         raise NoMatchException unless matched
-        (@current_command = @command.shift(matched.size)) if matched.size > 0
+        result = nil # so that we close it, rather than making a bunch of new ones
         if block_given?
-          raise NoMatchException if @arity_match && block.arity != @command.size 
-          result = yield *(@command)
+          with_current.call do
+            raise NoMatchException if @arity_match && block.arity != @command.size
+            result = yield *(@command)
+          end
           set_executed_commands
         else
           # not sure this works the way it ought to
-          result = dispatch(self.worker, 
-            (@current_command * '_').to_sym, *(@command))
+          with_current.call do 
+            result = dispatch(self.worker, 
+              (@current_command * '_').to_sym, *(@command))
+          end
         end
+        @command.unshift *(@current_command)
         @result = result.nil? ? @result : result
         stop_with @result if @stop_after
       rescue NoMatchException => e
-        @command.unshift *(@current_command)
+        # skip that stuff 
       end
       @command_block = @previous_command_blocks.pop
       @result
@@ -323,12 +342,22 @@ module StateProcessor
       throw :pause_processing, result
     end
 
+    def consume_command! num=1
+      @command.shift(num)
+    end
+
+    # simple stub implementation error handle.
+    # we need to figure out which protocol object called me and pass it back the error
+    def error e
+      $stderr.puts e 
+    end
+
     def reset_states
-      #called by return to clear internal block stock
+      #called by return to clear internal block stack
       callchain.each do |c|
         c.instance_exec do
           # go to the front of the line!
-          @command_block = @previous_command_blocks.first
+          @command_block = @previous_command_blocks.first || @command_block
           @previous_command_blocks = []
           ps = @previous_states.pop
           @current_state = ps
@@ -337,82 +366,78 @@ module StateProcessor
     end
     private :reset_states
 
-    def consume_command! num=1
-      @command.shift(num)
-    end
-
     def set_executed_commands
-      @command.unshift(*@current_command)
       (@executed_commands << @current_command.shift) if @current_command
       @current_command = nil
     end 
     private :set_executed_commands
   
-    # simple stub implementation error handle.
-    # we need to figure out which protocol object called me and pass it back the error
-    def error e
-      $stderr.puts e 
+
+    def clean
+      reset_states rescue nil
+      set_executed_commands rescue nil
     end
+    private :clean
+
+    def work
+      begin
+        unless @current_state 
+          @current_state = Fiber.new do |new_cmd|
+            @command = new_cmd
+            loop do
+              # this makes the stack unwind to the top of the current command block
+              @result = catch :pause_processing do 
+                @result = instance_exec(@command,&(@command_block))
+              end
+              raise StateProcessorDoesNotRespond unless @executed_commands.size > 0
+              # resume with the next command
+              @command = Fiber.yield @result
+            end
+          end
+        end
+        @current_state.resume @command
+      rescue FiberError => e
+        error "dead fiber"
+        @current_state = false
+        retry
+      rescue LocalJumpError => e
+        if e.reason == :return
+          reset_states
+          set_executed_commands
+          #apparently, this will yield to the origin fiber...
+          #this feels kinda "black magicky"
+          Fiber.yield e.exit_value
+        else
+          raise e
+        end
+      rescue StateProcessorDoesNotRespond => e
+        reset_states rescue nil
+        raise e
+      rescue StateProcessorError => e
+        clean
+        raise e
+      rescue StandardError => e
+        if methods.include? :report_error then
+          report_error e
+        else
+          error e
+        end
+        clean
+      end
+    end
+    private :work
 
     def process cmd, top=true
       @executed_commands = []
-      puts cmd 
       @command = cmd
-
-     # define the main working block
-      workf = lambda do 
-        begin
-          unless @current_state 
-            @current_state = Fiber.new do
-              loop do
-                # this makes the stack unwind to the top of the current command block
-                @result = catch :pause_processing do 
-                  @result = instance_exec(@command,&(@command_block))
-                end
-                raise StateProcessorDoesNotRespond unless @executed_commands.size > 0
-                Fiber.yield @result
-              end
-            end
-          end
-          @current_state.resume
-        rescue FiberError
-          error "dead fiber"
-          @current_state = false
-          retry
-        rescue LocalJumpError => e
-          if e.reason == :return
-            reset_states
-            set_executed_commands 
-            throw :stop_processing, e.exit_value 
-          end
-        rescue StateProcessorError => e
-          raise e
-        rescue StandardError => e
-          if methods.include? :report_error then
-            puts 'calling report error'
-            report_error e
-          else
-            puts 'default error handler'
-            error e
-          end
-        rescue StateProcessorDoesNotRespond => e
-          reset_states rescue nil
-          raise e
-        rescue => e
-          error "some unknown error" 
-          reset_states rescue nil
-          set_executed_commands rescue nil
-          raise e
-        # perhaps i could use an ensure here to reset_states and set_executed
-        end
-      end
       
       if top
-        @result = catch :stop_processing do 
-          workf.call
+        @origin = Fiber.new do 
+          work
         end
+        @result = @origin.resume
       else
-        @result = workf.call
+        @result = work
       end
       #-- RAISING STOP PROCESSING WILL COME BACK TO HERE--#
       @result
