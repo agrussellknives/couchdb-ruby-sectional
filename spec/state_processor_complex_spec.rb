@@ -47,8 +47,7 @@ class AdvancedStateProcessor
     end
 
     on :reset_top do
-      # setting top causes processing to resume after :reset_top is called
-      switch_state NewTop, top: true do
+      @nt = switch_state NewTop, top: true do
         commands do
           on :end_this do
             return "bob"
@@ -57,10 +56,12 @@ class AdvancedStateProcessor
       end
     end
 
-    puts 'after reset top'
-    debugger
     on :reset_top, :end_this, :post_reset do
       return "post_reset"
+    end
+
+    on :reset_top, :end_this, :new_top do
+      return @nt, "okay"
     end
   end
 end
@@ -120,12 +121,17 @@ describe AdvancedStateProcessor, "subcomponent matching" do
   end
 
   it "it should be able to reset top" do
-    debugger
     out = @co << [:reset_top,:end_this]
     out.should == "bob"
+    debugger
 
     out = @co << [:reset_top,:end_this,:post_reset]
     out.should == "post_reset"
+  end
+
+  it "should accumulate the results of subcomponents if you ask it to" do
+    out = @co << [:reset_top, :end_this,:new_top]
+    out.should == ["bob","okay"]
   end
 
   describe "independent component" do

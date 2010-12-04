@@ -15,6 +15,9 @@ module StateProcessor
         @save = [] 
         super
       end
+      def total_matches
+        size + @save.size
+      end
     end
 
     module ClassMethods
@@ -130,7 +133,7 @@ module StateProcessor
       if self.worker.respond_to? m 
         dispatch(self.worker, m, *args, &block)
       else
-        raise NameError, "undefined local variable or method `#{m}' for #{self.inspect}" 
+        raise NameError, "undefined local variable or method `#{m}' for #{self.inspect} (from section method_missing)" 
       end
     end
     
@@ -171,7 +174,7 @@ module StateProcessor
     alias :anything :_
 
     def _!(arg=nil)
-      return StateProcessorMatch unless arg
+      return StateProcessorConsume unless arg
       lambda do |a|
         break a == arg ? StateProcessorConsume : StateProcessorNoMatch 
       end
@@ -188,11 +191,15 @@ module StateProcessor
 
       indifferent_match = lambda do |arg,match|
         if match.is_a? Symbol
-          return arg.to_sym if arg.to_sym == match
+          begin
+            arg = arg.to_sym
+            return arg if arg == match
+          rescue NoMethodError 
+            return false
+          end
         else
           return arg if arg == match
         end
-        false
       end
 
       cmd_match.each_with_index do |arg,i|
@@ -209,17 +216,15 @@ module StateProcessor
         cmd.each do |c|
           match_action = mp.call(c)
           if match_action == StateProcessorMatch
-            matches << arg
+            matches << c 
           elsif match_action == StateProcessorConsume
-            matches.save << arg
+            matches.save << c 
           end
         end
       end
-
-      ret_matches = []
-      ret_matches = matches + matches.save
-      raise NoMatchException unless ret_matches.size >= matchlist.size
-      ret_matches 
+      
+      raise NoMatchException unless matches.total_matches >= matchlist.size
+      matches 
     end
     private :match_args
 
@@ -242,7 +247,7 @@ module StateProcessor
 
         with_current = lambda do |&cur_block|
           begin
-            (@current_command = @command.shift(matched.size)) if matched.size > 0
+            (@current_command = @command.shift(matched.total_matches)) if matched.size > 0
             cur_block.call 
           ensure
             @command.unshift *(@current_command)
@@ -250,11 +255,12 @@ module StateProcessor
         end
 
         raise NoMatchException unless matched
+        debugger if args == [:anything, :sa]
         result = nil # so that we close it, rather than making a bunch of new ones
         if block_given?
           with_current.call do
             raise NoMatchException if @arity_match && block.arity != @command.size
-            result = yield *(@command)
+            result = yield *(@command + matched.save)
           end
           set_executed_commands
         else
@@ -264,13 +270,13 @@ module StateProcessor
               (@current_command * '_').to_sym, *(@command))
           end
         end
-        @command.unshift *(@current_command)
         @result = result.nil? ? @result : result
         stop_with @result if @stop_after
       rescue NoMatchException => e
         # skip that stuff 
       end
-      @command_block = @previous_command_blocks.pop
+      # what are the circumstances where previous doesn't have any?
+      @command_block = @previous_command_blocks.pop || @command_block
       @result
     end
 
@@ -335,7 +341,12 @@ module StateProcessor
         end
       end
       # next time, control will be passed to our calling block or our block
-      @command_block = if block_given? then block else @previous_command_blocks.pop end
+      if block_given?
+        @previous_command_blocks << @command_block if @command_block
+        @command_block = block
+      else
+        @command_block = @previous_command_blocks.pop
+      end
       set_executed_commands
         
       # unwind to the command block 
@@ -384,6 +395,7 @@ module StateProcessor
         unless @current_state 
           @current_state = Fiber.new do |new_cmd|
             @command = new_cmd
+            debugger unless @command_block
             loop do
               # this makes the stack unwind to the top of the current command block
               @result = catch :pause_processing do 
