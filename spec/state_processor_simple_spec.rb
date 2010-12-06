@@ -46,6 +46,14 @@ class SimpleStateProcessor
       return true 
     end
 
+    on :indifferent_match do
+      return true
+    end
+
+    on "indifferent_match_string" do
+      return true
+    end
+
     on :should, :not, :match, :more_specific do
       return "shouldn't see this!"
     end
@@ -255,6 +263,14 @@ describe SimpleStateProcessor, 'simple matching' do
   describe "guard clauses" do
     it "should match a simple command" do
       out = @co << [:simple_match]
+      out.should == true
+    end
+
+    it "should do an idifferent match between symbols and strings" do
+      debugger
+      out = @co << ["indifferent_match"]
+      out.should == true
+      out = @co << [:indifferent_match_string]
       out.should == true
     end
 

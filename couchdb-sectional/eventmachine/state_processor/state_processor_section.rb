@@ -89,25 +89,9 @@ module StateProcessor
         state_class = StateProcessorFactory[state] 
       rescue StateProcessorInvalidState
         raise unless block_given?
-        # switch the worker object for the duration of the yield
-        # is that really the prettiest way to do this?
-        #old_worker, self.class.worker = self.class.worker, state
-        
-        # generally, if the block was given it's suppling "here only" subcommands
         state_class = state.class_eval &block
-        #state = yield
-        #self.class.worker = old_worker
         retry 
       end
-      #TODO investigate whether flatten is appropriate here, or if we should do a single
-      # level flatten, or perhaps just leave it to the calling state
-      # to prepare our arguments for us.
-      # actually, we should leave it to the protocol.  there should be 
-      # prep command method in the protocol
-      
-      # we have our state_class now - we should check to see if we've already instantiated processors
-      # underneath ourselves
-      # seriously?
       processor = if @processors.has_key?(state_class) then
         @processors[state_class]
       else
@@ -185,15 +169,21 @@ module StateProcessor
     def match_args(matchlist,cmd)
       matches = ArgumentMatches.new 
       
-      match_proc,cmd_match = matchlist.partition do |m|
-        true if m.is_a? Proc
+      match_proc = []
+      cmd_match = []
+      matchlist.each do |m|
+        if m.is_a? Proc
+          match_proc << m
+          cmd_match << StateProcessorFunction
+        else
+          cmd_match << m
+        end
       end
 
-      indifferent_match = lambda do |arg,match|
-        if match.is_a? Symbol
+      indifferent_match = lambda do |match,arg|
+        if match.is_a?(Symbol) || arg.is_a?(Symbol)
           begin
-            arg = arg.to_sym
-            return arg if arg == match
+            return arg if arg.to_sym == match.to_sym 
           rescue NoMethodError 
             return false
           end
@@ -203,6 +193,7 @@ module StateProcessor
       end
 
       cmd_match.each_with_index do |arg,i|
+        next if cmd_match == StateProcessorFunction
         if arg == StateProcessorMatch
           matches << cmd[i] 
         elsif arg == StateProcessorConsume
@@ -255,7 +246,6 @@ module StateProcessor
         end
 
         raise NoMatchException unless matched
-        debugger if args == [:anything, :sa]
         result = nil # so that we close it, rather than making a bunch of new ones
         if block_given?
           with_current.call do
@@ -352,6 +342,7 @@ module StateProcessor
       # unwind to the command block 
       throw :pause_processing, result
     end
+    alias :answer :pass
 
     def consume_command! num=1
       @command.shift(num)

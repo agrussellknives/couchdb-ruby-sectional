@@ -16,6 +16,7 @@ module StateProcessor
     # want to match those.  i think the idea of them want to match
     # :sectional_match is alittle obscure, but hey.  anyway,
     # nobody will EVER want to match these.
+    StateProcessorFunction = Class.new(BasicObject)
     StateProcessorMatch = Class.new(BasicObject) 
     StateProcessorNoMatch = Class.new(BasicObject) 
     StateProcessorConsume = Class.new(BasicObject) 

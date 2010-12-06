@@ -41,7 +41,6 @@ class PatternMatchingStateProcessing
     end
 
     on save_anywhere(:sa3), :sa4 do |a|
-      debugger
       p 'on save_anywhere(:hi), 1, 2 do |a|'  
       return a
     end
@@ -51,9 +50,12 @@ class PatternMatchingStateProcessing
       return [:sa, b,f,bo]
     end
 
+    # match anything in the first position
+    # match foo anywhere
+    # match bar anywhwere and append it to the end of the argument list
     on _,_(:foo),_!(:bar) do |b,c|
       p 'on _,_(:foo),_!(:bar) do |b,c|' 
-      return c,b
+      return b,c
     end
   end
 end
@@ -102,7 +104,6 @@ describe PatternMatchingStateProcessing, "should match patterns" do
   end
 
   it "should save anywhere, truncating to length of blocks args" do
-    debugger
     out = @co << [:sa3, :sa4, :sa5]
     out.should == :sa5
   end

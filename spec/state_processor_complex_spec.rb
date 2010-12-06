@@ -11,6 +11,14 @@ class AdvancedStateProcessor
     def worker_test
       return "worker test"
     end
+
+    class InternalSwitchStateAgain
+      include StateProcessor
+      include StateProcessor::StateProcessorWorker
+      def nested_test
+        return 'nested test'
+      end
+    end
   end
 
   class NewTop
@@ -29,6 +37,16 @@ class AdvancedStateProcessor
         commands do
           on :okay do
             return 'okay'
+          end
+
+          on :nest_test do
+            switch_state InternalSwitchStateAgain do
+              commands do
+                return_after do
+                  on :nested_test
+                end
+              end
+            end
           end
 
           return_after do
@@ -105,6 +123,11 @@ describe AdvancedStateProcessor, "subcomponent matching" do
     it "should switch state to subcomponent" do
       out = @co << [:switch_state,:okay]
       out.should == 'okay'
+    end
+
+    it "should switch state to a nested subcomponent" do
+      out = @co << [:switch_state, :nest_test, :nested_test]
+      out.should == 'nested test'
     end
 
     it "should execute in the original state in return" do

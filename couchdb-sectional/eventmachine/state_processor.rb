@@ -78,6 +78,8 @@ module StateProcessor
         :protocol => protocol 
       }.merge options
 
+      debugger
+
       if block_given? then
         StateProcessorFactory.create( opts[:key], opts[:protocol], self, &block)
       else
