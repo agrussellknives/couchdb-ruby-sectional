@@ -18,6 +18,14 @@ class AdvancedStateProcessor
       def nested_test
         return 'nested test'
       end
+
+      class InternalSwitchStateAgainAndAgain
+        include StateProcessor
+        include StateProcessor::StateProcessorWorker
+        def nested_test2
+          return 'nested test 2'
+        end
+      end
     end
   end
 
@@ -40,10 +48,19 @@ class AdvancedStateProcessor
           end
 
           on :nest_test do
+            debugger
             switch_state InternalSwitchStateAgain do
               commands do
                 return_after do
                   on :nested_test
+                end
+               
+                switch_state InternalSwitchStateAgainAndAgain do
+                  commands do
+                    return_after do
+                      on :nested_test2
+                    end
+                  end
                 end
               end
             end
@@ -51,6 +68,17 @@ class AdvancedStateProcessor
 
           return_after do
             on :worker_test
+          end
+        end
+      end
+    end
+
+    debugger
+    on :again_again do
+      switch_state InternalSwitchStateAgainAndAgain do
+        commands do
+          on :nested_test3 do
+            return "uh oh, bad mojo" 
           end
         end
       end
@@ -130,6 +158,16 @@ describe AdvancedStateProcessor, "subcomponent matching" do
       out.should == 'nested test'
     end
 
+    it "should switch to a deeply nested subcomponent" do
+      out = @co << [:switch_state, :nest_test, :nested_test2]
+      out.should == 'nested test 2'
+    end
+
+    it "shouldn't do that if it's not called in the right nesting order" do
+      out = @co << [:again_again, :nested_test3]
+      out.should == "uh oh, bad mojo"
+    end
+
     it "should execute in the original state in return" do
       out = @co << [:switch_state, :okay]
       out.should == 'okay'
@@ -146,8 +184,6 @@ describe AdvancedStateProcessor, "subcomponent matching" do
   it "it should be able to reset top" do
     out = @co << [:reset_top,:end_this]
     out.should == "bob"
-    debugger
-
     out = @co << [:reset_top,:end_this,:post_reset]
     out.should == "post_reset"
   end

@@ -59,7 +59,15 @@ module StateProcessor
         @protocol
       end
     end
-   
+
+    def add_child(cls)
+      @tree << cls
+    end
+
+    def const_missing(sym)
+      puts "missing consts sym"
+    end
+
     def key(key=nil)
       @key = key ? key : @key
     end
@@ -68,17 +76,12 @@ module StateProcessor
       @worker = worker ? worker : @worker
     end
 
-    def test
-      'test'
-    end
-
     def commands options={}, &block
       opts = {
         :key => self.to_s.underscore.to_sym,
         :protocol => protocol 
       }.merge options
 
-      debugger
 
       if block_given? then
         StateProcessorFactory.create( opts[:key], opts[:protocol], self, &block)
@@ -88,5 +91,10 @@ module StateProcessor
         end
       end
     end
+  end
+
+  included do |name|
+    name_sym = name.to_s.split('::').last
+    self.nesting.last.const_set(name_sym,name)
   end
 end

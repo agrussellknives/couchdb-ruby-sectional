@@ -82,6 +82,7 @@ module StateProcessor
       self
     end
 
+
     def switch_state state, opts = {}, &block
       protocol = opts.has_key?(:protocol) ? opts[:protocol] : self.class.protocol
       top = opts.has_key?(:top) ? opts[:top] : false
