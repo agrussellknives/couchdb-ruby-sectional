@@ -31,6 +31,7 @@ module StateProcessor
           hex_id = "%x" % self.object_id << 1
           "#<#{self.worker.to_s}ProcessorClass:0x#{hex_id} protocol: #{self.protocol}>" 
         end
+
       end
     end
     
@@ -87,15 +88,11 @@ module StateProcessor
       # need to make this better
       protocol = opts.has_key?(:protocol) ? opts[:protocol] : self.class.protocol
       top = opts.has_key?(:top) ? opts[:top] : false
-      block_exec_flag = true
       begin
         state_class = StateProcessorFactory[state]
       rescue StateProcessorInvalidState
         raise unless block_given?
         state_class = state.class_eval &block
-        # check to make sure it was added to the class factory and
-        # raise an exception if it wasn't
-        block_exec_flag = false
         retry 
       end
       # execute a block if one was passed to us an we are not already defined
@@ -104,23 +101,7 @@ module StateProcessor
       else
         @processors[state_class] = state_class.new(self,opts)
       end
-      
-      with_override_block = lambda do
-        old_command = @command_block 
-        if block_exec_flag and block_given?
-          @command_block.push &block 
-        end
-        begin
-          yield
-        ensure
-          @command_block = old_command
-        end
-      end
-        
-      with_override_block do
-        @result = processor.process(@command.flatten,top)
-      end
-
+      @result = processor.process(@command.flatten,top)
     end
 
     def dispatch obj, m, *args, &block
@@ -260,7 +241,7 @@ module StateProcessor
 
         with_current = lambda do |&cur_block|
           begin
-            (@current_command = @command.shift(matched.total_matches)) if matched.size > 0
+            (@current_command = @command.shift(matched.total_matches)) if matched.total_matches > 0
             cur_block.call 
           ensure
             @command.unshift *(@current_command)
@@ -359,7 +340,7 @@ module StateProcessor
       else
         @command_block = @previous_command_blocks.pop
       end
-      set_executed_commands
+      set_executed_command_chain
         
       # unwind to the command block 
       throw :pause_processing, result
@@ -389,6 +370,16 @@ module StateProcessor
       end
     end
     private :reset_states
+
+    def set_executed_command_chain
+      #return the executed commmands up our call stack
+      callchain.each do |c|
+        c.instance_eval do 
+          set_executed_commands 
+        end
+      end
+    end
+    private :set_executed_command_chain
 
     def set_executed_commands
       (@executed_commands << @current_command.shift) if @current_command

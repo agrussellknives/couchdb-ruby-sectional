@@ -7,6 +7,7 @@ module StateProcessor
     class StateProcessorCannotPerformAction < StateProcessorError; end
     class StateProcessorInvalidState < StateProcessorError; end
     class StateProcessorContextConflict < StateProcessorError; end
+    class StateProcessorCommandsAlreadyDefined < StateProcessorError; end
   end
 
   module StateProcessorMatchConstant

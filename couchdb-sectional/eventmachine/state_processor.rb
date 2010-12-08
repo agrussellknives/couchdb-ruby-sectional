@@ -69,6 +69,11 @@ module StateProcessor
     end
 
     def commands options={}, &block
+      if StateProcessorFactory.knows_state? self
+        puts 'command defined!'
+        raise StateProcessorCommandsAlreadyDefined, "command block already defined for #{self}"
+      end
+
       opts = {
         :key => self.to_s.underscore.to_sym,
         :protocol => protocol 
@@ -76,11 +81,7 @@ module StateProcessor
 
 
       if block_given? then
-        if StateProcessorFactory.knows_state? self
-          yield
-        else
-          StateProcessorFactory.create( opts[:key], opts[:protocol], self, &block)
-        end
+        StateProcessorFactory.create( opts[:key], opts[:protocol], self, &block)
       else
         StateProcessorFactory.create( opts[:key], opts[:protocol], self) do |command|
           puts command

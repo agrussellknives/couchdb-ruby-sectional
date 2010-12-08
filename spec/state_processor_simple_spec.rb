@@ -176,7 +176,6 @@ class SimpleStateProcessor
       on :pass_test3 do
         return "test3"
       end
-      puts 'fell off the end'
     end
 
   end
@@ -267,7 +266,6 @@ describe SimpleStateProcessor, 'simple matching' do
     end
 
     it "should do an idifferent match between symbols and strings" do
-      debugger
       out = @co << ["indifferent_match"]
       out.should == true
       out = @co << [:indifferent_match_string]

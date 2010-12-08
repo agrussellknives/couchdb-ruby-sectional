@@ -59,6 +59,14 @@ class AdvancedStateProcessor
                     return_after do
                       on :nested_test2
                     end
+
+                    on :pass_test do
+                      answer "pass_test"
+                    end
+
+                    on :pass_tested2 do
+                      return "test pasted"
+                    end
                   end
                 end
               end
@@ -75,7 +83,6 @@ class AdvancedStateProcessor
     on :again_again do
       switch_state InternalSwitchStateAgainAndAgain do
         commands do
-          debugger
           on :nested_test3 do
             return "uh oh, bad mojo" 
           end
@@ -162,9 +169,28 @@ describe AdvancedStateProcessor, "subcomponent matching" do
       out.should == 'nested test 2'
     end
 
-    it "shouldn't do that if it's not called in the right nesting order" do
-      out = @co << [:again_again, :nested_test3]
-      out.should == "uh oh, bad mojo"
+    it "shouldn't be able to define new commands" do
+      lambda { @co << [:again_again, :nested_test3] }.should raise_error (
+        StateProcessor::StateProcessorExceptions::StateProcessorDoesNotRespond)
+    end
+    
+    it "should however, be able to execute the original ones" do
+      out = @co << [:again_again, :nested_test2]
+      out.should == 'nested test 2'
+    end
+
+    it "component resume should work predictably" do
+      out = @co << [:switch_state, :nest_test, :pass_test]
+      out.should == "pass_test"
+      out = @co << [:pass_tested2]
+      out.should == "test pasted"
+    end
+
+    it "should resume even if it's arrived at by a different path" do
+      out = @co << [:again_again, :pass_test]
+      out.should == "pass_test"
+      out = @co << [:pass_tested2]
+      out.should == "test pasted"
     end
 
     it "should execute in the original state in return" do
