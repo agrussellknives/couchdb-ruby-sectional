@@ -60,14 +60,6 @@ module StateProcessor
       end
     end
 
-    def add_child(cls)
-      @tree << cls
-    end
-
-    def const_missing(sym)
-      puts "missing consts sym"
-    end
-
     def key(key=nil)
       @key = key ? key : @key
     end
@@ -84,7 +76,11 @@ module StateProcessor
 
 
       if block_given? then
-        StateProcessorFactory.create( opts[:key], opts[:protocol], self, &block)
+        if StateProcessorFactory.knows_state? self
+          yield
+        else
+          StateProcessorFactory.create( opts[:key], opts[:protocol], self, &block)
+        end
       else
         StateProcessorFactory.create( opts[:key], opts[:protocol], self) do |command|
           puts command

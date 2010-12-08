@@ -84,21 +84,42 @@ module StateProcessor
 
 
     def switch_state state, opts = {}, &block
+      # need to make this better
       protocol = opts.has_key?(:protocol) ? opts[:protocol] : self.class.protocol
       top = opts.has_key?(:top) ? opts[:top] : false
+      block_exec_flag = true
       begin
-        state_class = StateProcessorFactory[state] 
+        state_class = StateProcessorFactory[state]
       rescue StateProcessorInvalidState
         raise unless block_given?
         state_class = state.class_eval &block
+        # check to make sure it was added to the class factory and
+        # raise an exception if it wasn't
+        block_exec_flag = false
         retry 
       end
+      # execute a block if one was passed to us an we are not already defined
       processor = if @processors.has_key?(state_class) then
         @processors[state_class]
       else
         @processors[state_class] = state_class.new(self,opts)
       end
-      @result = processor.process(@command.flatten,top)
+      
+      with_override_block = lambda do
+        old_command = @command_block 
+        if block_exec_flag and block_given?
+          @command_block.push &block 
+        end
+        begin
+          yield
+        ensure
+          @command_block = old_command
+        end
+      end
+        
+      with_override_block do
+        @result = processor.process(@command.flatten,top)
+      end
 
     end
 

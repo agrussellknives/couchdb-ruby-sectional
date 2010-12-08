@@ -48,7 +48,6 @@ class AdvancedStateProcessor
           end
 
           on :nest_test do
-            debugger
             switch_state InternalSwitchStateAgain do
               commands do
                 return_after do
@@ -73,10 +72,10 @@ class AdvancedStateProcessor
       end
     end
 
-    debugger
     on :again_again do
       switch_state InternalSwitchStateAgainAndAgain do
         commands do
+          debugger
           on :nested_test3 do
             return "uh oh, bad mojo" 
           end
