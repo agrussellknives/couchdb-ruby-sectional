@@ -278,12 +278,6 @@ module StateProcessor
       self.class.worker.context &block  
     end
 
-    # call context in the worker, supressing the overwrite exception
-    def context! &block
-      self.class.worker.context! &block
-    end
-
-
     # i am not exactly sure you should ever do this.
     def exit e
       raise StateProcessorExit, e

@@ -18,16 +18,7 @@ module StateProcessor
       
       def context &block
         return @context if not block_given?
-        raise StateProcessorContextConflict,"#{self} already had a context." if @context
         @context = block
-      end
-
-      def context! &block
-        begin
-          context &block
-        rescue StateProcessorContextConflict => e
-          @context = block
-        end
       end
     end
 
