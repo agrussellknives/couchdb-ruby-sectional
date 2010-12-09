@@ -9,6 +9,8 @@ module StateProcessor
       attr_accessor :value
     end
 
+    HaltProcessing = Class.new(BasicObject)
+
     class ArgumentMatches < Array
       attr_reader :save
       def initialize
@@ -36,8 +38,7 @@ module StateProcessor
     end
     
     OPTLIST = [ :command, :executed_command, :origin, :result, :callingstate, :current_command, :worker ]
-
-    OPERATORS = [:_, :*]
+    INHERITED_OPTS = [ :command, :executed_command, :result, :current_command]
     
     included do 
       OPTLIST.collect { |opt| attr_accessor opt }
@@ -51,6 +52,13 @@ module StateProcessor
 
     def options 
       OPTLIST.inject({}) do |memo,k|
+        memo[k] = self.send "#{k}"
+        memo
+      end
+    end
+
+    def inheritable_options_from
+      INHERITED_OPTS.inject({}) do |memo,k|
         memo[k] = self.send "#{k}"
         memo
       end
@@ -69,15 +77,22 @@ module StateProcessor
       end
     end
 
+    def originchain 
+      Enumerator.new do |y|
+        callchain.each do |cs|
+          y.yield cs.origin if cs.origin
+        end
+      end
+    end
+
 
     def initialize callingstate=nil, opts = {}
       # who knew - you can't call an attr_accessor from initialize
-      self.options = callingstate.options.merge opts if callingstate
+      self.options = callingstate.inheritable_options_from.merge opts if callingstate
       @callingstate = callingstate
       @previous_states = []
       @processors = {}
       @command_block = self.class.commands
-      @executed_command = []
       @previous_command_blocks = []
       @worker = self.class.worker.new
       self
@@ -278,6 +293,12 @@ module StateProcessor
       self.class.worker.context &block  
     end
 
+    # call context in the worker, supressing the overwrite exception
+    def context! &block
+      self.class.worker.context! &block
+    end
+
+
     # i am not exactly sure you should ever do this.
     def exit e
       raise StateProcessorExit, e
@@ -337,7 +358,9 @@ module StateProcessor
       set_executed_command_chain
         
       # unwind to the command block 
-      throw :pause_processing, result
+      pause = PauseProcessing.new
+      pause.value = result
+      raise pause
     end
     alias :answer :pass
 
@@ -396,43 +419,48 @@ module StateProcessor
             debugger unless @command_block
             loop do
               # this makes the stack unwind to the top of the current command block
-              @result = catch :pause_processing do 
-                @result = instance_exec(@command,&(@command_block))
+              # when you resume the current state fiber, this is where it starts again.
+              # it actually runs all the way down to the end of this loop 
+              # and then comes back.
+              result = nil 
+              begin 
+                result = instance_exec(@command,&(@command_block))
+                raise StateProcessorDoesNotRespond unless @executed_commands.size > 0
+              rescue PauseProcessing => e
+                @command = originchain.first.transfer e.value
+              rescue LocalJumpError => e
+                if e.reason == :return
+                  reset_states
+                  set_executed_commands
+                  originchain.first.transfer e.exit_value
+                else
+                  raise e
+                end
+              rescue StateProcessorDoesNotRespond => e
+                reset_states rescue nil
+                raise e
+              rescue StateProcessorError => e
+                clean
+                raise e
+              rescue StandardError => e
+                if methods.include? :report_error then
+                  report_error e
+                else
+                  error e
+                end
+                clean
+                @command = Fiber.yield result
+              else
+                @command = Fiber.yield result
               end
-              raise StateProcessorDoesNotRespond unless @executed_commands.size > 0
-              # resume with the next command
-              @command = Fiber.yield @result
             end
           end
         end
-        @current_state.resume @command
+        result = @current_state.transfer @command
       rescue FiberError => e
-        error "dead fiber"
+        error "dead fiber #{e}"
         @current_state = false
         retry
-      rescue LocalJumpError => e
-        if e.reason == :return
-          reset_states
-          set_executed_commands
-          #apparently, this will yield to the origin fiber...
-          #this feels kinda "black magicky"
-          Fiber.yield e.exit_value
-        else
-          raise e
-        end
-      rescue StateProcessorDoesNotRespond => e
-        reset_states rescue nil
-        raise e
-      rescue StateProcessorError => e
-        clean
-        raise e
-      rescue StandardError => e
-        if methods.include? :report_error then
-          report_error e
-        else
-          error e
-        end
-        clean
       end
     end
     private :work
@@ -442,8 +470,9 @@ module StateProcessor
       @command = cmd
       
       if top
-        @origin = Fiber.new do 
-          work
+        @origin = Fiber.new do
+          result = work
+          Fiber.yield result
         end
         @result = @origin.resume
       else
