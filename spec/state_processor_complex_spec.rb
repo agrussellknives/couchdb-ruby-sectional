@@ -1,4 +1,4 @@
-require_relative '../couchdb-sectional/eventmachine/state_processor'
+require_relative '../couchdb-sectional/state_processor'
 
 require_relative 'helpers'
 

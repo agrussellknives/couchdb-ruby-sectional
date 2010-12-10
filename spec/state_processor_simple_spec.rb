@@ -1,4 +1,4 @@
-require_relative '../couchdb-sectional/eventmachine/state_processor'
+require_relative '../couchdb-sectional/state_processor'
 
 require_relative 'helpers'
 
@@ -36,12 +36,13 @@ class SimpleStateProcessor
 
   protocol RubyPassThroughProtocol
 
-  commands do 
-    on_error do |e|
-      error e.message
-      error e.backtrace
-    end
+  on_error do |e|
+    error e.message
+    error e.backtrace
+  end
 
+  commands do 
+    
     on :simple_match do
       return true 
     end
@@ -217,29 +218,33 @@ describe SimpleStateProcessor, 'simple matching' do
       out = @co << [:test]
       out.should == 88
     end
-  end
 
-  describe "should recover from errors gracefully" do
-    it "if it doesn't respond at all it raises an error" do
-      lambda { @co << [:boogety] }.should raise_error (
-        StateProcessor::StateProcessorExceptions::StateProcessorDoesNotRespond)
-      out = @co << [:simple_match]
-      out.should == true
+    describe "should recover from errors gracefully" do
+      it "if it doesn't respond at all it raises an error" do
+        lambda { @co << [:boogety] }.should raise_error (
+          StateProcessor::StateProcessorExceptions::StateProcessorDoesNotRespond)
+        out = @co << [:simple_match]
+        out.should == true
+      end
+
+      it "errors within worker code are consumed" do
+        @co << [:error_test]
+        out = @co << [:simple_match]
+        out.should == true
+      end
+
+      it "raises errors to the top if you don't handle them" do
+        @co.state_processor.worker.class.send :remove_method, :report_error
+        lambda { @co << [:error_test] }.should raise_error(NameError)
+      end 
+
+      it "trying to execute worker code that doesn't exist is an error" do
+        lambda { @co << [:error_test2]}.should raise_error (
+          StateProcessor::StateProcessorExceptions::StateProcessorCannotPerformAction)
+        out = @co << [:simple_match]
+        out.should == true
+      end
     end
-
-    it "errors within worker code are consumed" do
-      @co << [:error_test]
-      out = @co << [:simple_match]
-      out.should == true
-    end
-
-    it "trying to execute worker code that doesn't exist is an error" do
-      lambda { @co << [:error_test2]}.should raise_error (
-        StateProcessor::StateProcessorExceptions::StateProcessorCannotPerformAction)
-      out = @co << [:simple_match]
-      out.should == true
-    end
-
   end
 
   it "should raise a exception on invalid messages" do

@@ -12,7 +12,8 @@ require_relative 'eval_debugger'
 %w(exceptions runner sandbox arguments).each {|mod| require_relative "couchdb_core/#{mod}" }
 
 #event machine
-%w(query_server_protocol state_processor).each {|mod| require_relative "eventmachine/#{mod}" } 
+require_relative './state_processor'
+require_relative './state_processor/protocols/query_server_protocol'
 
 module CouchDB
   include Arguments
@@ -45,14 +46,14 @@ module CouchDB
     (log 'Waiting for debugger...'; debugger) if wait_for_connection  
     EventMachine::run do
       @pipe = EM.attach $stdin, StateProcessor::StateProcessorFactory[state].protocol do |pipe|
-        #pipe is the anonymous recieving class that EventMachine creates
-        puts pipe
         pipe.state_processor_root = StateProcessor::StateProcessorFactory[state].new
         pipe.run do |command|
           begin
             write pipe.state_processor_root.process(command) 
-          rescue StateProcessorDoesNotRespond, StateProcessorExit => e
-            exit :error, e.to_s 
+          rescue StateProcessorDoesNotRespond,
+                 StateProcessorCannotPerformAction, 
+                 StateProcessorError => e
+            exit e 
           end
         end
       end
