@@ -121,7 +121,7 @@ module StateProcessor
 
     def dispatch obj, m, *args, &block
       if obj and obj.respond_to? m
-        obj.send m, *args, &block
+        obj.__send__ m, *args, &block
       else
         raise StateProcessorCannotPerformAction.new( 
             "Could not perform action #{m} in #{self.class.inspect} with worker #{self.class.worker}")
@@ -381,8 +381,7 @@ module StateProcessor
           # go to the front of the line!
           @command_block = @previous_command_blocks.first || @command_block
           @previous_command_blocks = []
-          ps = @previous_states.pop
-          @current_state = ps
+          @current_state = nil
         end
       end
     end
