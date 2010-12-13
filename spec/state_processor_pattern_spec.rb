@@ -11,42 +11,34 @@ class PatternMatchingStateProcessing
   commands do
 
     on anything, 1 do
-      p 'on anything, 1 do'
       return :anything,1
     end
 
     on anywhere(:hello) do
-      p 'on anywhere(:hello) do' 
       return "hello"
     end
 
     on _, 2 do
-      p 'on _, 2 do'
       return :_, 2
     end
 
     on _(:hi) do
-      p 'on _(:hi),2 do'  
       return :hi,2
     end
 
     on save_anything, :sa do |a|
-      p 'on save_anything, :sa do |a|'  
       return a
     end
 
     on save_anything, :sa2 do |b,c|
-      p 'on save_anything, :sa2 do |b,c|' 
       return b,c
     end
 
     on save_anywhere(:sa3), :sa4 do |a|
-      p 'on save_anywhere(:hi), 1, 2 do |a|'  
       return a
     end
     
     on :sa, _!(:bar), _!(:foo), _!(:bob) do |b,f,bo|
-      p 'on :sa, _!(:bar), _!(:foo), _!(:bob) do |b,f,bo|' 
       return [:sa, b,f,bo]
     end
 
@@ -54,7 +46,6 @@ class PatternMatchingStateProcessing
     # match foo anywhere
     # match bar anywhwere and append it to the end of the argument list
     on _,_(:foo),_!(:bar) do |b,c|
-      p 'on _,_(:foo),_!(:bar) do |b,c|' 
       return b,c
     end
   end

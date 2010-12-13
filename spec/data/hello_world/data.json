@@ -1,0 +1,21 @@
+{
+    "docs": [
+        {
+            "_id": "hello_world",
+            "type": "sectional_app",
+            "components": [
+                "headline",
+                "greeting" 
+            ] 
+        },
+        {
+            "_id": "greeting",
+            "type": "component" 
+        },
+        {
+            "_id": "headline",
+            "type": "component" 
+        } 
+    ] 
+}
+

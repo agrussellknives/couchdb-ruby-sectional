@@ -5,11 +5,10 @@ module StateProcessor
   module StateProcessorSection
     include StateProcessor::StateProcessorExceptions
     include StateProcessor::StateProcessorMatchConstant
-    include StateProcessorSectionStack
-    include StateProcessorArgumentMatching
     
     extend ActiveSupport::Concern  
-   
+  
+    # Similar to LocalJumpError - used when we want to "answer" a message.
     class PauseProcessing < StandardError
       attr_accessor :value
     end
@@ -67,8 +66,19 @@ module StateProcessor
       @worker = self.class.worker.new
       self
     end
-
-
+    
+    # Process the message from here using a different compoenent. This can be an external
+    # component (in which case it should already be defined) or a nested component,
+    # in which case the command block should be definied within the block
+    # passed to switch_state
+    # @param [StateProcessorSection] state - use the processor for this state.
+    # @param [Hash] opts - options for the state
+    # @options opts :protocol - switch the protocol for RESPONDING to the 
+    #   message.  The receiving protocol cannot be changed once the message is received.
+    # @options opts :top - set this to 'true' to set this state as the "top" state.
+    #   'returns' within this state will exit at the end of the switch state block
+    # @yield - a block must be supplied if the state does not already exist.  It will
+    #   be class_evaled in order to set up the processor
     def switch_state state, opts = {}, &block
       # need to make this better
       protocol = opts.has_key?(:protocol) ? opts[:protocol] : self.class.protocol
@@ -108,45 +118,14 @@ module StateProcessor
         raise NameError, "undefined local variable or method `#{m}' for #{self.inspect} (from section method_missing)" 
       end
     end
-    
-    # a method which runs a compiled function in the context of a method
-    # used for callbacks / contiuation passing, etc.
-    def run *args, &block
-      @current_command.map do |c|
-        args.unshift c.to_sym
-      end
-      self.worker.run(*args, &block)
-    end
-    
-    # A convience method for sending the current command to the class of the worker object
-    def execute cmd=nil, *args, &block
-      if block_given?
-        # i can't think of a reason why you'd need to pass args in if you gave
-        # it a block
-        dispatch(self.class.worker.instance_eval(&block))
-      else
-        ex = ArgumentError.new('Execute must be passed a method name or block')
-        raise ex unless cmd.kind_of? Symbol
-        begin 
-          dispatch(self.class.worker, cmd, *args)
-        rescue StateProcessorCannotPerformAction => e
-          raise
-        end
-      end
-    end
-
-    
-    
+        
+    # Match the message, executing the block if the message is matched.
+    # @param [Symbol, Regex, Proc, Object, Array,...] - an object ot match.  If it is equal
+    #  then it is considered to have "matched" the argument.
+    # @yield remaining parts of the message
+    # @todo Refactor so it uses a LUT with multiple matchprocs, instead of calling this
+    # method each time it is encountered.
     def on *args, &block
-      #TODO, rewrite so it stores commands and does a lookup at runtime rather than
-      #running through all of the commands
-      # this is O(N) since it calls this method once for each "on" block.
-      # I could get it instead to store them in a lut, and then executed based
-      # on the value of "matched" which would be better
-      #
-      #
-      # REFACTOR
-      #
       @previous_command_blocks << @command_block
       @command_block = block 
       
@@ -188,95 +167,12 @@ module StateProcessor
       @result
     end
 
-    # call context in the worker 
-    def context &block
-      self.class.worker.context(&block)  
-    end
-
-    # call context in the worker, supressing the overwrite exception
-    def context! &block
-      self.class.worker.context!(&block)
-    end
-
-
-    # i am not exactly sure you should ever do this.
-    def exit e
-      raise StateProcessorExit, e
-    end
- 
-    # equivalent to "return"
-    def stop_with result
-      e = LocalJumpError.new
-      #subvert! cheat! 
-      e.instance_eval do
-        @reason = :return
-        @exit_value = result
-      end
-      raise e 
-    end
-
-    def arity_match
-      begin 
-        @arity_match = true
-        yield
-      ensure
-        @arity_match = false
-      end
-    end
-    alias :matching_arity :arity_match
-      
-
-    def return_after 
-      begin
-        @stop_after = true
-        yield
-      ensure
-        @stop_after = false
-      end
-    end
-    alias :stopping_after :return_after
-
-    def pass result, &block
-      
-      callchain.each do |c|
-        c.instance_exec @current_state do |cs|
-          @previous_states << @current_state
-          @current_state = cs
-        end
-      end
-      # next time, control will be passed to our calling block or our block
-      if block_given?
-        @previous_command_blocks << @command_block if @command_block
-        @command_block = block
-      else
-        @command_block = @previous_command_blocks.pop
-      end
-      set_executed_command_chain
-        
-      # unwind to the command block 
-      pause = PauseProcessing.new
-      pause.value = result
-      raise pause
-    end
-    alias :answer :pass
-
-    def consume_command! num=1
-      @command.shift(num)
-    end
-
-    # simple stub implementation error handle.
-    # we need to figure out which protocol object called me and pass it back the error
-    def error e
-      $stderr.puts e 
-    end
-
-    
+    private 
     def work
       begin
         unless @current_state 
           @current_state = Fiber.new do |new_cmd|
             @command = new_cmd
-            debugger unless @command_block
             loop do
               # this makes the stack unwind to the top of the current command block
               # when you resume the current state fiber, this is where it starts again.
@@ -303,6 +199,7 @@ module StateProcessor
                 clean
                 raise  
               rescue StandardError => e
+                # need to get this into the protocol
                 rep = callchain.each.find do |cs|
                   cs.worker.respond_to? :report_error
                 end
@@ -325,6 +222,8 @@ module StateProcessor
     end
     private :work
 
+    # Called by the protocol to set up the origin fiber and pass control
+    # to the proper fiber as necessary
     def process cmd, top=true
       @executed_commands = []
       @command = cmd

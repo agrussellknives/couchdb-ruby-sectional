@@ -90,7 +90,6 @@ module StateProcessor
       # who knew - you can't call an attr_accessor from initialize
       self.options = callingstate.inheritable_options_from.merge opts if callingstate
       @callingstate = callingstate
-      @previous_states = []
       @processors = {}
       @command_block = self.class.commands
       @previous_command_blocks = []
@@ -344,7 +343,6 @@ module StateProcessor
       
       callchain.each do |c|
         c.instance_exec @current_state do |cs|
-          @previous_states << @current_state
           @current_state = cs
         end
       end
