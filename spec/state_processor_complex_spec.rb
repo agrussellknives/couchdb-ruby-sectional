@@ -39,15 +39,27 @@ class AdvancedStateProcessor
 
   protocol RubyPassThroughProtocol
 
-  commands do
+  commands do 
+
+    on :hello do |a|
+      IndependentState << [:hi,a]  
+      answer :ok do
+        on :who do
+          n = IndepedentState << [:who]
+          return n
+        end
+      end
+    end
+
     on :switch_state do
-      switch_state InternalSwitchState do
-        commands do
+      switch_state InternalSwitchState do #should look up constants in worker context
+        commands do #should be run in processor context
           on :okay do
             return 'okay'
           end
 
           on :nest_test do
+            debugger
             switch_state InternalSwitchStateAgain do
               commands do
                 return_after do
@@ -145,6 +157,21 @@ class ExternalSwitchState
   end
 end
 
+class IndependentState
+  include StateProcessor
+  include StateProcessor::StateProcessorWorker
+
+  commands do
+    on :hi do |a|
+      @a = a 
+    end
+
+    on :who do
+      return @a
+    end
+  end
+end
+
 
 
 describe AdvancedStateProcessor, "subcomponent matching" do
@@ -211,6 +238,13 @@ describe AdvancedStateProcessor, "subcomponent matching" do
     out.should == "bob"
     out = @co << [:reset_top,:end_this,:post_reset]
     out.should == "post_reset"
+  end
+
+  it "it should be able to pass a 'submessage' to other states" do
+    out = @co << [:hello,"bob"]
+    out.should == :ok
+    out = @co << [:who]
+    out.should == "bob"
   end
 
   it "should accumulate the results of subcomponents if you ask it to" do

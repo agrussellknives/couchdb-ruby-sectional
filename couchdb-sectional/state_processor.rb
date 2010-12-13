@@ -79,6 +79,11 @@ module StateProcessor
       end
     end
 
+    #def const_missing const
+    #  debugger
+    #  puts "const missing form stateprocess module #{const}"
+    #end
+
     def processor
       StateProcessorFactory[key]
     end

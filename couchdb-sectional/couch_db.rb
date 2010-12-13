@@ -15,6 +15,9 @@ require_relative 'eval_debugger'
 require_relative './state_processor'
 require_relative './state_processor/protocols/query_server_protocol'
 
+require_relative './couchdb_core/utils/aspects'
+require_relative './couchdb_core/utils/metaid'
+
 module CouchDB
   include Arguments
   include StateProcessor::StateProcessorExceptions

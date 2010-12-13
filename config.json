@@ -1,5 +1,0 @@
-{
-  "couch_url": "http://127.0.0.1:5984",
-  "couch_filepath": "/opt/local/var/lib/couchdb",
-  "couch_bin": "/opt/local/bin/couchdb"
-}

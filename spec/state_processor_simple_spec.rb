@@ -142,7 +142,7 @@ class SimpleStateProcessor
 
     on :arg1 do
 
-      on :arg2 do 
+      on :arg2 do
         on :arg3 do
           return "arg3"
         end
@@ -162,11 +162,11 @@ class SimpleStateProcessor
         end
       end
       
-      on :pass_test4 do
+      on :pass_test4 do 
         pass "test4"
       end
 
-      on :pass_test do
+      on :pass_test do 
         pass "test"
       end
 

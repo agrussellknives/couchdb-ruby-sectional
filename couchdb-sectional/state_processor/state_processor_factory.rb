@@ -3,6 +3,8 @@ require 'forwardable'
 require 'continuation'
 require 'fiber'
 
+require_relative './state_processor_section'
+
 module StateProcessor
   class StateProcessorFactory
     include StateProcessorExceptions
@@ -27,18 +29,23 @@ module StateProcessor
           
           @state = state
           @protocol = protocol
-          @commands = block
           @worker = worker
-         
+          @command_block = block
+          
          class << self
            attr_accessor :protocol
            attr_accessor :state
-           attr_accessor :commands
            attr_accessor :worker
+           attr_accessor :command_block
 
            def inspect
              hex_id = "%x" % self.object_id << 1
              "#<#{self.worker.to_s}ProcessorClass:0x#{hex_id} protocol: #{self.protocol}>" 
+           end
+
+           def const_missing const
+             puts "constant missing #{const}"
+             debugger;1
            end
          end
        end

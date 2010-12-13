@@ -1,3 +1,6 @@
+require_relative '../couchdb-sectional/couchdb_core/utils/metaid'
+require_relative '../couchdb-sectional/couchdb_core/utils/aspects'
+
 
 module RubyPassThroughProtocol
   def <<(cmd)

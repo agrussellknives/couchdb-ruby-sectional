@@ -1,5 +1,8 @@
+
+
 require_relative './state_processor_argument_matching'
 require_relative './state_processor_stack'
+require_relative './state_processor_commands'
 
 module StateProcessor
   module StateProcessorSection
@@ -12,22 +15,7 @@ module StateProcessor
     class PauseProcessing < StandardError
       attr_accessor :value
     end
-
-    module ClassMethods
-      class << self
-        attr_accessor :protocol
-        attr_accessor :state
-        attr_accessor :commands
-        attr_accessor :worker
-
-        def inspect
-          hex_id = "%x" % self.object_id << 1
-          "#<#{self.worker.to_s}ProcessorClass:0x#{hex_id} protocol: #{self.protocol}>" 
-        end
-
-      end
-    end
-    
+        
     OPTLIST = [ :command, :executed_command, :origin, :result, :callingstate, :current_command, :worker ]
     INHERITED_OPTS = [ :command, :executed_command, :result, :current_command]
     
@@ -61,12 +49,13 @@ module StateProcessor
       @callingstate = callingstate
       @previous_states = []
       @processors = {}
-      @command_block = self.class.commands
+      @command_block = self.class.command_block
       @previous_command_blocks = []
       @worker = self.class.worker.new
+      @proccessor_binding = Proc.new {}
       self
     end
-    
+
     # Process the message from here using a different compoenent. This can be an external
     # component (in which case it should already be defined) or a nested component,
     # in which case the command block should be definied within the block
@@ -167,7 +156,6 @@ module StateProcessor
       @result
     end
 
-    private 
     def work
       begin
         unless @current_state 
@@ -178,9 +166,11 @@ module StateProcessor
               # when you resume the current state fiber, this is where it starts again.
               # it actually runs all the way down to the end of this loop 
               # and then comes back.
-              result = nil 
-              begin 
-                result = instance_exec(@command,&(@command_block))
+              result = nil
+              # redefine the command block to keep our constant
+              # lookup predictable
+              begin
+                result = instance_eval &@command_block 
                 raise StateProcessorDoesNotRespond unless @executed_commands.size > 0
               rescue PauseProcessing => e
                 @command = originchain.first.transfer e.value
@@ -204,6 +194,7 @@ module StateProcessor
                   cs.worker.respond_to? :report_error
                 end
                 raise e unless rep
+                debugger
                 self.instance_exec e, &rep.worker.report_error
                 clean
                 @command = Fiber.yield result

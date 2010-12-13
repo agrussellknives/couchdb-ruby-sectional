@@ -11,17 +11,17 @@ module StateProcessor
       # be based on any criteria available to the scope where context is called.
       # You normall use this to tell the worker something it wouldn't know about the
       # state it was called from.
-      @context = nil
-
-      # eeewwww 
-      StateProcessorContextConflict = StateProcessor::StateProcessorExceptions::StateProcessorContextConflict
-      
       def context &block
         return @context if not block_given?
         @context = block
       end
+       
+      def <<(*args)
+        debugger
+        puts args
+      end
     end
-
+    
     def initialize
       self.class.nesting.each do |nest|
         cont = nest.context

@@ -42,7 +42,7 @@ module StateProcessor
     # You normally use this to tell the worker something you wouldn't normally
     # know about the state that it was called from
     def context &block
-      self.class.worker.context(&block)  
+      self.worker.context(&block)  
     end
 
     # Raises StateProcessorExit, allowing cleanup but not returning anything.
@@ -106,7 +106,7 @@ module StateProcessor
       # next time, control will be passed to our calling block or our block
       if block_given?
         @previous_command_blocks << @command_block if @command_block
-        @command_block = block
+        @command_block = block 
       else
         @command_block = @previous_command_blocks.pop
       end
@@ -131,6 +131,8 @@ module StateProcessor
     def error e
       $stderr.puts e 
     end
+  end
+end
 
 
 
