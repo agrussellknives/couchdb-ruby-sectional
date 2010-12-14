@@ -59,7 +59,6 @@ class AdvancedStateProcessor
           end
 
           on :nest_test do
-            debugger
             switch_state InternalSwitchStateAgain do
               commands do
                 return_after do
@@ -138,6 +137,8 @@ class ExternalSwitchState
     return "external worker test"
   end
 
+  protocol RubyPassThroughProtocol
+
   commands do
     on :okay do
       return "external"
@@ -152,7 +153,7 @@ class ExternalSwitchState
     end
 
     on :not_okay do
-      pass "not_okay"
+      answer "not_okay"
     end
   end
 end
@@ -259,6 +260,7 @@ describe AdvancedStateProcessor, "subcomponent matching" do
     end
 
     it "should switch state to independent component and stay there" do
+      debugger
       out = @co << [:external_switch,:not_okay]
       out.should == "not_okay"
       out = @co << [:now_okay]

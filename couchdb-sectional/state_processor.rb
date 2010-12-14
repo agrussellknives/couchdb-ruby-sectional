@@ -50,11 +50,12 @@ module StateProcessor
       else
         unless @protocol 
           #the first one is always ourselves, so skip it.
-          @protocol = nesting[1..-1].each do |cl|
+          # subvert the intened use of each_with_object
+          @protocol = nesting[1..-1].each_with_object(nil) do |cl|
              protocol = cl.protocol
              # cause that's how i roll.
              break protocol if protocol 
-          end || NilProtocol
+          end
         end
         @protocol
       end

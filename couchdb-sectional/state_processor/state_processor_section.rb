@@ -15,7 +15,7 @@ module StateProcessor
     class PauseProcessing < StandardError
       attr_accessor :value
     end
-    AnswerToken = class.new(BasicObject)
+    AnswerToken = Class.new(BasicObject)
             
         
     OPTLIST = [ :command, :executed_command, :origin, :result, :callingstate, :current_command, :worker ]
@@ -174,8 +174,12 @@ module StateProcessor
                 result = instance_eval &@command_block 
                 raise StateProcessorDoesNotRespond unless @executed_commands.size > 0
               rescue PauseProcessing => e
-                if
-                @command = originchain.first.transfer e.value 
+                val = if self.class.protocol.instance_methods.include? :answer_token
+                  [AnswerToken, e.value]
+                else
+                  e.value
+                end
+                @command = originchain.first.transfer val
               rescue LocalJumpError => e
                 if e.reason == :return
                   reset_states
@@ -218,6 +222,9 @@ module StateProcessor
     # Called by the protocol to set up the origin fiber and pass control
     # to the proper fiber as necessary
     def process cmd, top=true
+      # should this raise an exception
+      raise StateProcessorNoProtocol,"protocol not specified for #{self.worker.class}" unless self.class.protocol 
+
       @executed_commands = []
       @command = cmd
       
