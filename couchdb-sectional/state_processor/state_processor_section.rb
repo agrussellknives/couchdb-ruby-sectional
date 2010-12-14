@@ -1,4 +1,4 @@
-
+require 'uuidtools'
 
 require_relative './state_processor_argument_matching'
 require_relative './state_processor_stack'
@@ -15,6 +15,8 @@ module StateProcessor
     class PauseProcessing < StandardError
       attr_accessor :value
     end
+    AnswerToken = class.new(BasicObject)
+            
         
     OPTLIST = [ :command, :executed_command, :origin, :result, :callingstate, :current_command, :worker ]
     INHERITED_OPTS = [ :command, :executed_command, :result, :current_command]
@@ -52,7 +54,6 @@ module StateProcessor
       @command_block = self.class.command_block
       @previous_command_blocks = []
       @worker = self.class.worker.new
-      @proccessor_binding = Proc.new {}
       self
     end
 
@@ -173,7 +174,8 @@ module StateProcessor
                 result = instance_eval &@command_block 
                 raise StateProcessorDoesNotRespond unless @executed_commands.size > 0
               rescue PauseProcessing => e
-                @command = originchain.first.transfer e.value
+                if
+                @command = originchain.first.transfer e.value 
               rescue LocalJumpError => e
                 if e.reason == :return
                   reset_states
