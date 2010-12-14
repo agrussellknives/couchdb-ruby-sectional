@@ -2,6 +2,7 @@ require_relative '../couchdb-sectional/state_processor'
 require_relative 'helpers'
 
 require 'eventmachine'
+require 'uuidtools'
 
 class ConcurrentTest
   include StateProcessor
@@ -41,17 +42,40 @@ class ConcurrentTest
   end
 end
 
-module PassServer
+class PassServer < EventMachine::Connection
+  
+  SERVER_POOL = {}
+
+  def initialize *args
+    super
+  end
+
+  def answer_token
+    @answer_token ||= UUIDTools::UUID.random_create.to_s
+  end
+    
+
   def post_init
     puts '--pass server started'
     @co = CommObject.new ConcurrentTest
   end
 
   def receive_data data
-    p self
     data = eval data
-    puts "got #{data}"
-    send_data (@co << data)
+    uuid = data.first rescue false
+
+    if SERVER_POOL.has_key? uuid
+      @co = SERVER_POOL[uuid]
+    end
+    
+    res = @co << data
+    
+    answer = res.first rescue false
+    if res.first == AnswerToken
+      SERVER_POOL[answer_token] = @co 
+      res.unshift answer_token
+    end
+    send_data res 
   end
 
   def unbind
