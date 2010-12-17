@@ -27,20 +27,20 @@ module StateProcessor
     
     def options= opts
       OPTLIST.each do |opt|
-        self.send "#{opt}=", opts[opt] if opts.has_key? opt
+        self.__send__ "#{opt}=", opts[opt] if opts.has_key? opt
       end
     end
 
     def options 
       OPTLIST.inject({}) do |memo,k|
-        memo[k] = self.send "#{k}"
+        memo[k] = self.__send__ "#{k}"
         memo
       end
     end
 
     def inheritable_options_from
       INHERITED_OPTS.inject({}) do |memo,k|
-        memo[k] = self.send "#{k}"
+        memo[k] = self.__send__ "#{k}"
         memo
       end
     end

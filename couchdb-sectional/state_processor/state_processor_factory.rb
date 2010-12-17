@@ -42,11 +42,6 @@ module StateProcessor
              hex_id = "%x" % self.object_id << 1
              "#<#{self.worker.to_s}ProcessorClass:0x#{hex_id} protocol: #{self.protocol}>" 
            end
-
-           def const_missing const
-             puts "constant missing #{const}"
-             debugger;1
-           end
          end
        end
         StateProcessorFactory.add_state klass, class_name.underscore.intern 
