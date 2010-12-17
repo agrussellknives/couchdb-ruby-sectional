@@ -7,16 +7,16 @@ class HelloWorld < SectionalApp
 
   commands do
     on :hello do |name|
-      Greeting << :say_hello
+      send Greeting, [:say_hello] 
     end
 
     on :goodbye do |name|
-      Greeting << :say_goodbye
+      send Greeting, [:say_goodby] 
     end
 
     consume_command!
     on do |name|
-      Headline << :name, name
+      send Headline, [:name] 
     end
     
     return render_all

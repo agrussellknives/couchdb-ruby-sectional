@@ -15,7 +15,7 @@ module StateProcessor
     class PauseProcessing < StandardError
       attr_accessor :value
     end
-    AnswerToken = class.new(BasicObject)
+    AnswerToken = Class.new(BasicObject)
             
         
     OPTLIST = [ :command, :executed_command, :origin, :result, :callingstate, :current_command, :worker ]
@@ -27,20 +27,20 @@ module StateProcessor
     
     def options= opts
       OPTLIST.each do |opt|
-        self.send "#{opt}=", opts[opt] if opts.has_key? opt
+        self.__send__ "#{opt}=", opts[opt] if opts.has_key? opt
       end
     end
 
     def options 
       OPTLIST.inject({}) do |memo,k|
-        memo[k] = self.send "#{k}"
+        memo[k] = self.__send__ "#{k}"
         memo
       end
     end
 
     def inheritable_options_from
       INHERITED_OPTS.inject({}) do |memo,k|
-        memo[k] = self.send "#{k}"
+        memo[k] = self.__send__ "#{k}"
         memo
       end
     end
@@ -174,7 +174,6 @@ module StateProcessor
                 result = instance_eval &@command_block 
                 raise StateProcessorDoesNotRespond unless @executed_commands.size > 0
               rescue PauseProcessing => e
-                if
                 @command = originchain.first.transfer e.value 
               rescue LocalJumpError => e
                 if e.reason == :return

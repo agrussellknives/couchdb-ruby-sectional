@@ -42,13 +42,25 @@ class AdvancedStateProcessor
   commands do 
 
     on :hello do |a|
-      IndependentState << [:hi,a]  
+      debugger
+      send IndependentState, [:hi,a]  
       answer :ok do
         on :who do
-          n = IndepedentState << [:who]
+          n = send IndependentState, [:who]
           return n
         end
       end
+    end
+
+    on :hello_again do |a|
+      send IndependentState, [:hi_again, a], deferred: true do |n|
+        @n = n 
+      end
+      return @n
+    end
+
+    on :hello_again_response do |a|
+      return @n
     end
 
     on :switch_state do
@@ -108,6 +120,7 @@ class AdvancedStateProcessor
 
     on :external_switch do
       switch_state ExternalSwitchState
+      return "no, i should never been seen"
     end
 
     on :reset_top do
@@ -164,6 +177,10 @@ class IndependentState
   commands do
     on :hi do |a|
       @a = a 
+    end
+
+    on :hi_again do |n|
+      return "hello from #{n}"
     end
 
     on :who do
@@ -240,11 +257,20 @@ describe AdvancedStateProcessor, "subcomponent matching" do
     out.should == "post_reset"
   end
 
-  it "it should be able to pass a 'submessage' to other states" do
-    out = @co << [:hello,"bob"]
-    out.should == :ok
-    out = @co << [:who]
-    out.should == "bob"
+  describe "submessages to independents" do
+    it "it should be able to pass a 'submessage' to other states" do
+      out = @co << [:hello,"bob"]
+      out.should == :ok
+      out = @co << [:who]
+      out.should == "bob"
+    end
+
+    it "should be able to async pass a 'submessage'" do
+      out = @co << [:hello_again,"bob"]
+      out.should == nil
+      out = @co << [:hello_again_response]
+      out.should == "hello from bob"
+    end
   end
 
   it "should accumulate the results of subcomponents if you ask it to" do

@@ -1,3 +1,4 @@
+require 'eventmachine'
 module StateProcessor
   module StateProcessorSection
     # Generally used to run a compiled function in the context of the worker.  This is useful if you
@@ -36,7 +37,38 @@ module StateProcessor
       end
     end
 
-  
+    def send state, msg, opts = {}, &block
+      options = {:deferred => false,
+                 :protocol => self.class.protocol }.merge opts
+      
+      # raises InvalidState if the state hasn't been 
+      # created yet
+      state_class = StateProcessorFactory[state]
+      state_class.protocol = options[:protocol] 
+      processor = state_class.new(self,options)
+      if options[:deferred] then
+        raise ArgumentError, "A block is required for deferred sends" unless block_given?
+        raise StateProcessorError, "Not able to defer because there is no event loop running." unless EM.reactor_running?
+        processor.meta_eval do 
+          include EventMachine::Deferrable
+        end
+        processor.callback &block
+        res = nil
+        EM.run_block do
+          res = processor.process(msg,true)
+        end
+        processor.succeed res
+      else
+        debugger
+        res = processor.process(msg,true)
+        if block_given?
+          yield res
+        else
+          return res
+        end
+      end
+    end
+     
   
     # Called in the context of the worker before each message is passed to it.
     # You normally use this to tell the worker something you wouldn't normally
