@@ -259,17 +259,21 @@ describe AdvancedStateProcessor, "subcomponent matching" do
   end
 
   describe "submessages to independents" do
+    before :all do 
+      @eco = EventedCommObject.new AdvancedStateProcessor
+    end
+
     it "it should be able to pass a 'submessage' to other states" do
-      out = @co << [:hello,"bob"]
+      out = @eco << [:hello,"bob"]
       out.should == :ok
-      out = @co << [:who]
+      out = @eco << [:who]
       out.should == "bob"
     end
 
     it "should be able to async pass a 'submessage'" do
-      out = @co << [:hello_again,"bob"]
+      out = @eco << [:hello_again,"bob"]
       out.should == nil
-      out = @co << [:hello_again_response]
+      out = @eco << [:hello_again_response]
       out.should == "hello from bob"
     end
   end
