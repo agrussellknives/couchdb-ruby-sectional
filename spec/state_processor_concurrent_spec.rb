@@ -1,7 +1,6 @@
 require_relative '../couchdb-sectional/state_processor'
 require_relative 'helpers'
 
-require 'eventmachine'
 require 'uuidtools'
 
 

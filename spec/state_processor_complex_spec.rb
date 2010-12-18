@@ -244,7 +244,6 @@ describe AdvancedStateProcessor, "subcomponent matching" do
       out = @co << [:do_not_switch]
       out.should == 'fine'
     end
-
     it "should have changed the worker" do
       out = @co << [:switch_state, :worker_test]
       out.should == "worker test"
@@ -276,6 +275,14 @@ describe AdvancedStateProcessor, "subcomponent matching" do
       out = @eco << [:hello_again_response]
       out.should == "hello from bob"
     end
+
+    after :all do
+      # kill the event machine we just started
+      EM.next_tick do
+        EM.stop 
+      end
+      @eco.kill_thread
+    end
   end
 
   it "should accumulate the results of subcomponents if you ask it to" do
@@ -290,7 +297,6 @@ describe AdvancedStateProcessor, "subcomponent matching" do
     end
 
     it "should switch state to independent component and stay there" do
-      debugger
       out = @co << [:external_switch,:not_okay]
       out.should == "not_okay"
       out = @co << [:now_okay]

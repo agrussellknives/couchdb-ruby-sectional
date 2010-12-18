@@ -1,6 +1,7 @@
 require_relative '../couchdb-sectional/couchdb_core/utils/metaid'
 require_relative '../couchdb-sectional/couchdb_core/utils/aspects'
 
+require 'em/pure_ruby'
 
 module RubyPassThroughProtocol
   def <<(cmd)
@@ -27,7 +28,8 @@ class EventedCommObject
     end
 
     def receive_data data
-      @state_processor.process(cmd)
+      puts 'recieve data called on eco'
+      send_data @state_processor.process(cmd)
     end
 
     def unbind
@@ -50,12 +52,13 @@ class EventedCommObject
     unless EM.reactor_running?
       @em_thread = Thread.new do
         EventMachine.run do
-          puts 'event-machine started'
+          puts "event-machine started with lib #{EM.library_type}"
           begin
-            debugger
-            EventMachine.attach(@stio,PassThroughClient)
+            puts 'trying to attach'
+            EventMachine.bind_string(@stio, PassThroughClient)
           rescue => e
-            debugger;1
+            debugger; 1
+            puts e
           end
         end
       end
@@ -64,6 +67,10 @@ class EventedCommObject
       raise StateProcessorError, "Couldn't start the reactor loop" unless wait_for_em_start_up
     end
     self
+  end
+
+  def kill_thread
+    @em_thread.kill #KILL KILL KILL KILL
   end
 
   def wait_for_em_start_up
@@ -78,7 +85,84 @@ class EventedCommObject
   end
 
   def << (msg)
-    @stio << Marshal.dump(msg)
-    Marshal.load(out = @stio.gets)
+    msg = Marshal.dump(msg)
+    debugger
+    @stio << msg 
   end
+end
+
+
+#let's fuckup eventmachine!
+#
+module EventMachine
+  class EvmaStringIO < StreamObject
+    def initialize io
+      # define eventmachine IO extensions on this object only 
+      # i could actually just monkey patch the stringIO class.
+      # we'll see
+      io.meta_eval do
+        extend Forwardable
+        def_delegator :@my_selectable, :close_scheduled?
+        def_delegator :@my_selectable, :select_for_reading?
+        def_delegator :@my_selectable, :select_for_writing?
+        def_delegator :@my_selectable, :eventable_read
+        def_delegator :@my_selectable, :eventable_write
+        def_delegator :@my_selectable, :uuid
+        def_delegator :@my_selectable, :send_data
+        def_delegator :@my_selectable, :schedule_close
+        def_delegator :@my_selectable, :get_peername
+        def_delegator :@my_selectable, :send_datagram
+        def_delegator :@my_selectable, :get_outbound_data_size
+        def_delegator :@my_selectable, :set_inactivity_timeout
+        def_delegator :@my_selectable, :heartbeat
+      end        
+
+      io.meta_def :fcntl do |cmd,arg|
+        #muhahahah
+        case cmd
+        when Fcntl::F_GETFL
+          #makes no difference, arg is ignored
+          return Fcntl::O_NONBLOCK | Fcntl::O_RDWR
+        when Fcntl::F_SETFL
+          #yes, yes, you set me to non blocking
+          return Fcntl::O_NONBLOCK
+        else
+          raise NotImplementError, "EvmaStringIO doesn't support other fcntl commands"
+        end
+      end
+              
+      debugger;1
+      # now call super
+      super
+      @pending = true
+    end
+
+    def select_for_writing?
+      true
+    end
+
+    def select_for_reading?
+      @io.size > 0 ? true : false
+    end
+
+    def self.connect str
+      EvmaStringIO.new str
+    end
+  end
+
+  class << self
+    def connect_string str
+      EvmaStringIO.connect str
+    end
+  end
+
+  def self.bind_string string, handler, *args
+    klass = klass_from_handler(Connection,handler,*args)
+    s = connect_string string
+    c = klass.new s, *args
+    @conns[s] = c
+    block_given? and yield c
+    c
+  end
+
 end
