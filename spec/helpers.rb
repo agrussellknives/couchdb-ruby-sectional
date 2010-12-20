@@ -42,10 +42,6 @@ class EventedCommObject
 
   def initialize stp
     @stio = StringIO.new ''
-    #thank you 1.9 for fucking up stringio
-    def @stio.fileno
-      self
-    end
 
     @state_processor = StateProcessor[stp].new()
     @state_processor.class.protocol = PassThroughClient
@@ -86,10 +82,27 @@ class EventedCommObject
 
   def << (msg)
     msg = Marshal.dump(msg)
-    debugger
-    @stio << msg 
+    EM.next_tick do
+      @stio << msg 
+    end
   end
 end
+
+class IOString < IO
+  def initialize init
+    @string = init
+    @write, @read = IO.pipe
+    @ios = [@write,@read]
+    self
+  end
+
+  def value
+    @string
+  end
+
+  # a whole bunch of alias_method_chain stuff
+  # can go here to keep all this stuff in sync
+end 
 
 
 #let's fuckup eventmachine!
@@ -100,35 +113,14 @@ module EventMachine
       # define eventmachine IO extensions on this object only 
       # i could actually just monkey patch the stringIO class.
       # we'll see
-      io.meta_eval do
-        extend Forwardable
-        def_delegator :@my_selectable, :close_scheduled?
-        def_delegator :@my_selectable, :select_for_reading?
-        def_delegator :@my_selectable, :select_for_writing?
-        def_delegator :@my_selectable, :eventable_read
-        def_delegator :@my_selectable, :eventable_write
-        def_delegator :@my_selectable, :uuid
-        def_delegator :@my_selectable, :send_data
-        def_delegator :@my_selectable, :schedule_close
-        def_delegator :@my_selectable, :get_peername
-        def_delegator :@my_selectable, :send_datagram
-        def_delegator :@my_selectable, :get_outbound_data_size
-        def_delegator :@my_selectable, :set_inactivity_timeout
-        def_delegator :@my_selectable, :heartbeat
-      end        
+      @wr, @rd = IO.pipe 
+      
+      io.meta_def :write do |args|
+        @wr << args
+      end
 
-      io.meta_def :fcntl do |cmd,arg|
-        #muhahahah
-        case cmd
-        when Fcntl::F_GETFL
-          #makes no difference, arg is ignored
-          return Fcntl::O_NONBLOCK | Fcntl::O_RDWR
-        when Fcntl::F_SETFL
-          #yes, yes, you set me to non blocking
-          return Fcntl::O_NONBLOCK
-        else
-          raise NotImplementError, "EvmaStringIO doesn't support other fcntl commands"
-        end
+      io.meta_def :read do
+        @rd.read
       end
               
       debugger;1
