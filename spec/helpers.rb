@@ -88,22 +88,6 @@ class EventedCommObject
   end
 end
 
-class IOString < IO
-  def initialize init
-    @string = init
-    @write, @read = IO.pipe
-    @ios = [@write,@read]
-    self
-  end
-
-  def value
-    @string
-  end
-
-  # a whole bunch of alias_method_chain stuff
-  # can go here to keep all this stuff in sync
-end 
-
 
 #let's fuckup eventmachine!
 #
