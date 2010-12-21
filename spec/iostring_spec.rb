@@ -29,6 +29,12 @@ describe "IOString should work almost exactly like StringIO" do
     @io.string.should == "foo"
   end
 
+  it "reading the string SHOULD clear the string" do
+    @io.write "foo"
+    @io.read_nonblock.should == "foo"
+    @io.read_nonblock.should == ""
+  end
+
   describe "handles large strings" do
     it "should be totally seamless if it's less than the system limit" do
       f = IOString.new("a" * (IOString::SystemSizeLimit - 10))
@@ -49,21 +55,45 @@ describe "IOString should work almost exactly like StringIO" do
     
 
   it "should truncate" do
-    debugger
     @io.puts "abc"
     @io.truncate(0)
     @io.puts "def"
     @io.string.should == "def\n"
     # truncate in this case behaves like it does with array indexes
-    lambda { @io.truncate(-1)}.should raise_error(Errno::EINVAL)
+    @io.truncate(-1)
+    @io.string.should == "def"
     @io.truncate(10)
-    @io.string.should == "def\n\0\0\0\0\0\0"
+    @io.string.should == "def\0\0\0\0\0\0"
+  end
+
+  it "should seek" do
+    @io.print("foobarbazbak")
+    @io.seek(3)
+    @io.read_nonblock.should == "barbazbak"
+    @io.string.should == 'foo'
+    @io.truncate
+
+    
+    @io.print("foobarbazbak")
+    @io.seek(3)
+    @io.seek(3, IO::SEEK_CUR)
+    @io.read_nonblock.should == "bazbak"
+    @io.string.should == 'foobar'
+    @io.truncate
+    
+    @io.print("foobarbazbak")
+    @io.seek(4)
+    @io.seek(3, IO::SEEK_CUR)
+    @io.seek(-7, IO::SEEK_END)
+    @io.read_nonblock.should == "foobarbazbak"
+    @io.string.should == ''
+    
   end
 
   it "should seek beyond eof" do
     @io.seek(100)
     @io.print("last")
-    @io.string.should == "\0" * n + last
+    @io.string.should == ("\0" * 100) + "last"
   end
 
   it "should overwrite" do
@@ -219,16 +249,6 @@ describe "IOString should work almost exactly like StringIO" do
     io2 = IOString.new
     io2.reopen(@io)
     io2.gets.should == "quux\n"
-  end
-
-  it "should seek" do
-    @io.write "1234"
-    lambda { @io.seek(-1) }.should raise_error(Errno::EINVAL)
-    @io.seek(-1,2)
-    @io.gets.should == "4"
-    lambda { @io.seek(1,3) }.should raise_error(Errno::EINVAL)
-    @io.close
-    lambda { @io.seek(0) }.should raise_error(IOError)
   end
 
   it "should read each_byte" do
