@@ -1,4 +1,6 @@
 require_relative '../couchdb-sectional/couchdb_core/utils/iostring'
+require 'timeout'
+
 
 describe "IOString should work almost exactly like StringIO" do
 
@@ -53,80 +55,103 @@ describe "IOString should work almost exactly like StringIO" do
     end
   end
     
-
-  it "should truncate" do
-    @io.puts "abc"
-    @io.truncate(0)
-    @io.puts "def"
-    @io.string.should == "def\n"
-    # truncate in this case behaves like it does with array indexes
-    @io.truncate(-1)
-    @io.string.should == "def"
-    @io.truncate(10)
-    @io.string.should == "def\0\0\0\0\0\0"
-  end
-
-  it "should seek" do
-    @io.print("foobarbazbak")
-    @io.seek(3)
-    @io.read_nonblock.should == "barbazbak"
-    @io.string.should == 'foo'
-    @io.truncate
-
-    
-    @io.print("foobarbazbak")
-    @io.seek(3)
-    @io.seek(3, IO::SEEK_CUR)
-    @io.read_nonblock.should == "bazbak"
-    @io.string.should == 'foobar'
-    @io.truncate
-    
-    @io.print("foobarbazbak")
-    @io.seek(4)
-    @io.seek(3, IO::SEEK_CUR)
-    @io.seek(-7, IO::SEEK_END)
-    @io.read_nonblock.should == "foobarbazbak"
-    @io.string.should == ''
-    
-  end
-
-  it "should seek beyond eof" do
-    @io.seek(100)
-    @io.print("last")
-    @io.string.should == ("\0" * 100) + "last"
-  end
-
   it "should overwrite" do
     responses = ['', 'just another ruby', 'hacker']
     responses.each do |resp|
       @io.puts(resp)
-      @io.rewind
     end
-    @io.string.should == "hacker\nother ruby\n"
+    @io.read_nonblock.should == "\njust another ruby\nhacker\n"
   end
 
-  it "should gets" do
-    IOString.new("").gets.should == nil
-    IOString.new("\n").gets.should == "\n"
-    IOString.new("a\n").gets.should == "a\n"
-    IOString.new("a\nb\n").gets.should == "a\n"
-    IOString.new("a").gets.should == "a"
-    IOString.new("a\nb").gets.should == "a\n"
-    IOString.new("abc\n\ndef\n").gets.should == "abc\n"
-    IOString.new("abc\n\ndef\n").gets(nil).should == "abc\n\n\def\n"
-    IOString.new("abc\n\ndef\n").gets("").should = "abc\n\n"
+  describe "gets" do
+
+    it "should gets" do
+      IOString.new("\n").gets.should == "\n"
+      IOString.new("a\n").gets.should == "a\n"
+      IOString.new("a\nb\n").gets.should == "a\n"
+      IOString.new("a\nb").gets.should == "a\n"
+      IOString.new("abc\n\ndef\n").gets.should == "abc\n"
+      IOString.new("abc\n\ndef\n").gets("").should == "abc\n\n"
+    end
+
+    it "nil seps is a blocking call" do
+      f = IOString.new("abc\n\ndef\n")
+      res = lambda do
+        begin 
+          timeout(1) do
+            f.gets(nil)
+          end
+        rescue Timeout::Error
+          debugger
+          f.close_write
+          retry
+        end
+      end.call
+      res.should == "abc\n\ndef\n"
+    end
+
+    it "should block waiting for newlines" do
+      lambda do 
+        timeout(1) do
+          IOString.new("").gets
+        end
+      end.should raise_error(Timeout::Error)
+    
+      lambda do
+        timeout(1) do
+          IOString.new("a").gets
+        end
+      end.should raise_error(Timeout::Error)
+    end
+
+    it "should sep other chars" do
+      f = IOString.new("a|b|c|")
+      ar = []
+      3.times do
+        ar << f.gets('|')
+      end
+      ar.should == ["a|","b|","c|"]
+
+      f = IOString.new("foo\nbar\nbaz\n")
+      f.gets(2).should == "fo"
+
+      o = Object.new
+      def o.to_str
+        "z"
+      end
+      f.gets(o).should == "o\nbar\nbaz"
+
+      f = IOString.new("foo\nbar\nbaz\n")
+      f.gets("az").should == "foo\nbar\nbaz"
+      f = IOString.new("a" * 10000 + "zz")
+      f.gets("zz").should == "a" * 10000 + "zz"
+      f = IOString.new("a" * 10000 + "zz!")
+      res = lambda do
+        begin
+          timeout(1) do
+            f.gets("zzz")
+          end
+        rescue Timeout::Error
+          f.puts "zzz"
+          retry
+        end
+      end.call
+      res.should == "a" * 10000 + "zz!"
+
+    end
   end
+
 
   it "should readlines" do
-    IOString.new("").readlines.should = [] 
-    IOString.new("\n").readlines.should = ["\n"]  
-    IOString.new("a\n").readlines.should = ["a\n"]  
-    IOString.new("a\nb\n").readlines.should = ["a\n", "b\n"]
-    IOString.new("a").readlines.should = [")"] 
-    IOString.new("a\nb").readlines.should = ["a\n", "b"] 
-    IOString.new("abc\n\ndef\n").readlines.should = ["abc\n", "\n", "def\n"] 
-    IOString.new("abc\n\ndef\n").readlines(nil).should = ["abc\n\ndef\n"] 
-    IOString.new("abc\n\ndef\n").readlines("").should = ["abc\n\n", "def\n"] 
+    IOString.new("").readlines.should == [] 
+    IOString.new("\n").readlines.should == ["\n"]  
+    IOString.new("a\n").readlines.should == ["a\n"]  
+    IOString.new("a\nb\n").readlines.should == ["a\n", "b\n"]
+    IOString.new("a").readlines.should == [")"] 
+    IOString.new("a\nb").readlines.should == ["a\n", "b"] 
+    IOString.new("abc\n\ndef\n").readlines.should == ["abc\n", "\n", "def\n"] 
+    IOString.new("abc\n\ndef\n").readlines(nil).should == ["abc\n\ndef\n"] 
+    IOString.new("abc\n\ndef\n").readlines("").should == ["abc\n\n", "def\n"] 
   end 
 
   it "should write nonblocking" do
@@ -324,21 +349,7 @@ describe "IOString should work almost exactly like StringIO" do
   end
 
   it "should gets2 ??" do
-    f = IOString.new("foo\nbar\nbaz\n")
-    f.gets(2).should == "fo"
 
-    o = Object.new
-    def o.to_str
-      "z"
-    end
-    f.gets(o).should == "o\nbar\nbaz"
-
-    f = IOString.new("foo\nbar\nbaz\n")
-    f.gets("az").should == "foo\nbar\nbaz\n"
-    f = IOString.new("a" * 10000 + "zz")
-    f.gets("zz").should = "a" * 10000 + "zz"
-    f = IOString.new("a" * 10000 + "zz!")
-    f.gets("zzz").should = "a" * 10000 + "zz!"
   end
   
   it "should address bug 4112" do
