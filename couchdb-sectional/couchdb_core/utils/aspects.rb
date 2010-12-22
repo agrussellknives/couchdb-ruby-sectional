@@ -2,7 +2,6 @@
 
 class Module 
   def define_aspect aspect_name, &definition
-    method_name, original_method = nil
     self.class.instance_eval do
       define_method(:"add_#{aspect_name}") do |*method_names|
         method_names.each do |method_name|

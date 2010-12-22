@@ -15,32 +15,37 @@ class IOString < IO
 
   define_aspect :overflow_read_check do |method_name, original_method|
     lambda do |*args, &blk|
-      begin
-        STDERR << "overflow read check for #{method_name}\n"
-        res = ''
-        rd_ln = args[0] || SystemSizeLimit
-        args[0] = rd_ln
-        #res << original_method.bind(self).call(*args,&blk)
-        #res << @read.read_nonblock(*args, &blk)
-        res << @read.send(method_name, *args, &blk)
-        amt = empty_overflow  #always do this at least once if necessary
-        while res.length < rd_ln and (amt and amt > 0)
-          args[0] = amt
-          #res << original_method.bind(self).call(*args,&blk)
-          #res << @read.read_nonblock(*args, &blk)
-          res << @read.send(method_name, *args, &blk)
-          empty_overflow #and as many more times as we need
+      if [:gets, :readlines].include? method_name then
+        if args[0].is_a? Integer
+          rd_ln = args[0]
+        else
+          rd_ln = SystemSizeLimit 
         end
-        res 
-      rescue Errno::EAGAIN => e 
-        '' if e.message =~ /read would block/ 
+      else
+        rd_ln =  args[0] || SystemSizeLimit
       end
+      res, amt = ['', 0]
+      
+      result = @read.send(method_name, *args, &blk)
+      res = res << result rescue result
+     
+      amt = empty_overflow  #always do this at least once if necessary
+      
+      # if the result was nil, go ahead and return that
+      return nil unless res
+
+      while res.length < rd_ln and amt > 0
+        args[0] = amt
+        res << @read.send(method_name, *args, &blk)
+        amt = empty_overflow #and as many more times as we need
+        break if not res # if we've read nil, then we're done.
+      end
+      res 
     end
   end
 
   define_aspect :overflow_write_check do |method_name, original_method|
     lambda do |*args, &blk|
-      STDERR << "overflow write check for #{method_name}\n"
       args[0] = args[0].to_s
       args[0] << "\n" if method_name == :puts
       len = args[0].length
@@ -54,49 +59,28 @@ class IOString < IO
       rescue Errno::EAGAIN
         @overflow = args[0][suc..-1]
       end
+      suc
     end
   end
 
   define_aspect :overflow_close_check do |method_name, original_method|
     lambda do |*args, &blk|
-      STDERR << "overflow close check for #{method_name}\n"
       raise OverflowError if overflowed?
       original_method.bind(self).call(*args,&blk)
     end
   end
 
-  define_aspect :read_seek_check do |method_name, original_method|
-    lambda do |*args, &blk|
-      STDERR << "read seek check for #{method_name} in position #{@readpos}\n"
-      str = original_method.bind(self).call(*args,&blk)
-      suffix = str[@readpos..-1]
-      @write.write_nonblock (str[0..@readpos-1]) if @readpos > 0
-      @readpos = 0
-      suffix 
-    end
-  end
-
-  define_aspect :write_seek_check do |method_name, original_method|
-    lambda do |*args, &blk|
-      STDERR << "write seek check for #{method_name} in position #{@readpos}\n"
-      str = @read.read_nonblock(@readpos) if @readpos > 0
-      original_method.bind(self).call(*args, &blk)
-      @readpos = 0
-    end
-  end
-
-  add_overflow_read_check(:getc, :gets, :read, :read_nonblock, :readbyte, :readchar, :readline,
+  add_overflow_read_check(:getc, :gets, :read, :read_nonblock, :readbyte, :readchar, :readlines, :readline,
     :readpartial, :sysread)
-  add_read_seek_check(:read, :read_nonblock, :readchar, :readline, :getc, :gets, :readpartial, :sysread)
 
   add_overflow_write_check(:print, :<<, :printf, :putc, :puts, :syswrite, :write, :write_nonblock)
-  add_write_seek_check(:print, :<<, :putc, :puts, :syswrite, :write, :write_nonblock) 
+
+  # sync to a readpipe makes no sense...
+  extend Forwardable
+  def_delegators :@write, :sync, :sync=
 
 
-  add_overflow_close_check(:close_write, :close_read)
-
-
-  MAP_METHOD = [:fcntl, :ioctl, :close, :reopen, :status, :sync, :sync=]
+  MAP_METHOD = [:fcntl, :ioctl, :close, :reopen, :status]
 
   SystemSizeLimit = 2**16 
 
@@ -110,8 +94,7 @@ class IOString < IO
 
   class << self
     def open val
-      n = IOString.new(init)
-      n.close_write
+      n = IOString.new(val)
       res = (yield n if block_given?) or n
       n.close
       res
@@ -122,26 +105,19 @@ class IOString < IO
     nil
   end
 
-  def close_write!
+  def close_write
     @write.close
   end
 
-  def close_read!
+  def close_read
     @read.close
   end
+  
+  # add them to this instance, and not to the superclass
+  add_overflow_close_check(:close_write, :close_read)
 
-  def seek n, whence = IO::SEEK_SET
-    # this is of questionable semantic value
-    if whence == IO::SEEK_CUR or whence == IO::SEEK_END
-      @readpos += n
-    else 
-      @readpos = n
-    end
-    @readpos
-  end
-
-  def rewind
-    seek(0)
+  def seek
+    raise Errno::ESPIPE, "Invalid Seek" 
   end
 
   def read_all(limit=nil)
@@ -150,7 +126,7 @@ class IOString < IO
     begin
       loop do
         p_str = read_nonblock(rl)
-        break if p_str == "" 
+        break if p_str == "" || p_str.nil?
         str << p_str
       end
     rescue Errno::EINTR
@@ -162,22 +138,6 @@ class IOString < IO
   end
   private :read_all
 
-  def truncate len=0
-    debugger if len < 0
-    raise IOError, "Writing side closed." if @write.closed?
-    read_reset = true if @readpos > 0
-    @readpos = 0 
-    left = read_all
-    if len > 0 then
-      if left.length < len then left << ("\0" * (len - left.length)) end
-    end 
-    write left[0..len].chop
-    if read_reset 
-      @readpos = len >= 0 ? len : (left.length + len)
-    end
-    @readpos
-  end
-    
 
   def pid
     nil
@@ -190,8 +150,7 @@ class IOString < IO
   def initialize init=nil
     @read, @write = IO.pipe
     @overflow = ''
-    @readpos = 0
-    write_nonblock init if init
+    write init if init
     @ios = [@write,@read]
     self
   end
@@ -201,7 +160,7 @@ class IOString < IO
   end
   
   def empty_overflow
-    write_nonblock @overflow if overflowed?
+    if overflowed? then write @overflow else 0 end
   end
 
   def to_s
@@ -244,7 +203,11 @@ class IOString < IO
     c.include? false ? false : true
   end
 
-  add_logging(*instance_methods.to_a)
+  def fsync
+    raise Errno::EINVAL, "can't fsync pipes"
+  end
+
+  #add_logging(*instance_methods.to_a)
 end 
 
 

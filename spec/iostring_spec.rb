@@ -25,16 +25,25 @@ describe "IOString should work almost exactly like StringIO" do
     f.string.should == "foo"
   end
 
+  it "should init with value" do
+    f = IOString.new("foo")
+    f.string.should == "foo"
+    f.print "foo"
+    f.string.should == "foofoo"
+  end
+
   it "getting the string should not clear the string" do
     @io.write "foo"
     @io.string.should == "foo"
-    @io.string.should == "foo"
+    @io.write "bar"
+    @io.string.should == "foobar"
   end
 
   it "reading the string SHOULD clear the string" do
     @io.write "foo"
-    @io.read_nonblock.should == "foo"
-    @io.read_nonblock.should == ""
+    @io.read_nonblock(1000).should == "foo"
+    @io.write "bar"
+    @io.read_nonblock(1000).should == "bar"
   end
 
   describe "handles large strings" do
@@ -46,6 +55,7 @@ describe "IOString should work almost exactly like StringIO" do
     it "requires an overflow check if it's more than the system limit" do
       f = IOString.new("a" * (IOString::SystemSizeLimit) + ("b" * 10000))
       lambda { f.close_write }.should raise_error(IOString::OverflowError)
+      debugger
       str = f.read(IOString::SystemSizeLimit)
       f.close_write
       # otherwise the call blocks
@@ -53,14 +63,20 @@ describe "IOString should work almost exactly like StringIO" do
       str.should == "a" * (IOString::SystemSizeLimit) + ("b" * 10000)
       f.close
     end
+
+    it "not subject to system limit read" do
+      f = IOString.new("a" * 2**20)
+      str = f.read_nonblock(2**20)
+      str.should == "a" * 2**20
+    end
   end
     
-  it "should overwrite" do
+  it "shouldn't overwrite" do
     responses = ['', 'just another ruby', 'hacker']
     responses.each do |resp|
       @io.puts(resp)
     end
-    @io.read_nonblock.should == "\njust another ruby\nhacker\n"
+    @io.read_nonblock(1000).should == "\njust another ruby\nhacker\n"
   end
 
   describe "gets" do
@@ -76,17 +92,17 @@ describe "IOString should work almost exactly like StringIO" do
 
     it "nil seps is a blocking call" do
       f = IOString.new("abc\n\ndef\n")
-      res = lambda do
-        begin 
-          timeout(1) do
-            f.gets(nil)
-          end
-        rescue Timeout::Error
-          debugger
-          f.close_write
-          retry
+      res = ''
+      t = Thread.new do
+        res = f.gets(nil)
+      end
+      lambda do
+        timeout(1) do
+          t.join  
         end
-      end.call
+      end.should raise_error Timeout::Error
+      f.close_write
+      t.join
       res.should == "abc\n\ndef\n"
     end
 
@@ -125,34 +141,82 @@ describe "IOString should work almost exactly like StringIO" do
       f.gets("az").should == "foo\nbar\nbaz"
       f = IOString.new("a" * 10000 + "zz")
       f.gets("zz").should == "a" * 10000 + "zz"
-      f = IOString.new("a" * 10000 + "zz!")
-      res = lambda do
-        begin
-          timeout(1) do
-            f.gets("zzz")
-          end
-        rescue Timeout::Error
-          f.puts "zzz"
-          retry
-        end
-      end.call
-      res.should == "a" * 10000 + "zz!"
+      f = IOString.new("a" * 10 + "zz!")
+      
+      res = ''
+      t = Thread.new do
+        res = f.gets("zzz")
+      end
 
+      # make sure it blocks 
+      lambda do
+        timeout(1) do
+          t.join
+        end
+      end.should raise_error Timeout::Error
+     
+      # until it receieve a sep
+      f.puts "zzz"
+      t.join # wait for it to finish
+
+      res.should == "a" * 10 + "zz!zzz"
     end
   end
 
+  describe "readlines" do
+    it "should timeout without newlines" do
+      lambda do 
+        timeout(1) do
+          IOString.new("").readlines
+        end
+      end.should raise_error Timeout::Error
 
-  it "should readlines" do
-    IOString.new("").readlines.should == [] 
-    IOString.new("\n").readlines.should == ["\n"]  
-    IOString.new("a\n").readlines.should == ["a\n"]  
-    IOString.new("a\nb\n").readlines.should == ["a\n", "b\n"]
-    IOString.new("a").readlines.should == [")"] 
-    IOString.new("a\nb").readlines.should == ["a\n", "b"] 
-    IOString.new("abc\n\ndef\n").readlines.should == ["abc\n", "\n", "def\n"] 
-    IOString.new("abc\n\ndef\n").readlines(nil).should == ["abc\n\ndef\n"] 
-    IOString.new("abc\n\ndef\n").readlines("").should == ["abc\n\n", "def\n"] 
-  end 
+      lambda do
+        timeout(1) do
+          IOString.new("a").readlines
+        end
+      end.should raise_error Timeout::Error
+    end
+    
+    it "should read multiple lines into an array" do
+      ts = ["\n","a\n","a\nb\n"]
+      ts.each do |s|
+        f = nil
+        t = Thread.new do
+          f = IOString.new(s)
+        end
+        t.join(0.1)
+        f.close_write
+        f.readlines 
+      end
+    end
+
+    it "should readlines with whatever seperator" do
+      tl = lambda do |s, sep = $/|
+        f = nil
+        t = Thread.new do
+          f = IOString.new(s)
+        end
+        t.join(0.1)
+        f.close_write
+        f.readlines(sep)
+      end
+
+      tl.call("a\nb").should == ["a\n","b"]
+      tl.call("abc\n\ndef\n").should == ["abc\n", "\n", "def\n"]  
+      tl.call("abc\n\ndef\n",nil).should == ["abc\n\ndef\n"]  
+      tl.call("abc\n\ndef\n","").should == ["abc\n\n", "def\n"]  
+    end
+
+    it "should readlines with a limit" do
+      t = Thread.new do
+        @io.write("foobar\n" * 10)
+      end
+      t.join(0.1)
+      @io.close_write
+      @io.readlines(5).should == ["fooba","r\n"].cycle(10).to_a
+    end
+  end
 
   it "should write nonblocking" do
     # this needs a better test to make sure it's actually a nonblocking
@@ -162,15 +226,10 @@ describe "IOString should work almost exactly like StringIO" do
     f.string.should == "ffoo"
   end
 
-  it "should raise mode errors" do
-    # not sure it should actually
-    pending
-  end
-
   it "should open with a value" do
     # this usage really makes no sense
     res = IOString.open("foo") do |f|
-      f.read
+      f.read_nonblock(5)
     end
     res.should == "foo"
   end
@@ -180,11 +239,11 @@ describe "IOString should work almost exactly like StringIO" do
   end
 
   it "should fsync on call" do
-    IOString.new("").fsync.should == 0
+    lambda { IOString.new("blah blah blah").fsync }.should raise_error Errno::EINVAL
   end
 
   it "should set sync on call" do
-    IOString.new("").sync.should == true
+    IOString.new("foo").sync.should == true
     t = IOString.new("").sync = false
     t.should == false
   end
@@ -192,7 +251,8 @@ describe "IOString should work almost exactly like StringIO" do
   it "should fcntl on each io element" do
     @io.fcntl(Fcntl::F_SETFL, Fcntl::O_NONBLOCK)
     fct = @io.fcntl(Fcntl::F_GETFL,0)
-    fct.should == [Fcntl::O_NONBLOCK, Fcntl::O_NONBLOCK]
+    fct.should == [Fcntl::O_NONBLOCK | Fcntl::O_WRONLY, Fcntl::O_NONBLOCK | Fcntl::O_RDONLY]
+    # perhaps i should coalcse these into a single element so it seems more correct?
   end
 
   it "should close both" do
