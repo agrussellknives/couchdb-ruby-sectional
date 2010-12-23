@@ -28,12 +28,11 @@ class IOString < IO
       
       result = @read.send(method_name, *args, &blk)
       res = res << result rescue result
-     
       amt = empty_overflow  #always do this at least once if necessary
       
       # if the result was nil, go ahead and return that
       return nil unless res
-
+      
       while res.length < rd_ln and amt > 0
         args[0] = amt
         res << @read.send(method_name, *args, &blk)
@@ -70,27 +69,46 @@ class IOString < IO
     end
   end
 
-  add_overflow_read_check(:getc, :gets, :read, :read_nonblock, :readbyte, :readchar, :readlines, :readline,
-    :readpartial, :sysread)
+  define_aspect :byte_wise_overflow_check do |method_name, original_method|
+    lambda do |*args, &blk|
+      res = original_method.bind(self).call(*args,&blk)
+      if overflowed?
+        c, @overflow = @overflow.chr, @overflow[1..-1]
+        @write.putc c 
+      end
+      res
+    end
+  end
 
-  add_overflow_write_check(:print, :<<, :printf, :putc, :puts, :syswrite, :write, :write_nonblock)
+  add_overflow_read_check(:getc, :gets, :read, :read_nonblock, :readchar, :readlines, :readline,
+    :readpartial)
+
+  add_overflow_write_check(:print, :<<, :printf, :putc, :puts, :write, :write_nonblock)
 
   # sync to a readpipe makes no sense...
   extend Forwardable
-  def_delegators :@write, :sync, :sync=
+  def_delegators :@write, :sync, :sync=, :closed_write?, :syswrite
+  def_delegators :@read, :eof?, :closed_read?, :each_byte, :getbyte, :readbyte, :sysread, :each_char
 
+  add_byte_wise_overflow_check(:getbyte,:readbyte,:each_byte, :each_char)
 
-  MAP_METHOD = [:fcntl, :ioctl, :close, :reopen, :status]
+  UNDEF_METHOD = [:ungetbyte, :ungetc]
 
-  SystemSizeLimit = 2**16 
+  UNDEF_METHOD.each do |meth|
+    undef_method meth
+  end
 
-  class OverflowError < IOError; end
+  MAP_METHOD = [:fcntl, :ioctl, :close, :status]
 
   MAP_METHOD.each do |meth|
     define_method meth do |*args|
       @ios.collect { |i| i.send meth, *args}
     end
   end
+ 
+  SystemSizeLimit = 2**16 
+  
+  class OverflowError < IOError; end
 
   class << self
     def open val
@@ -111,6 +129,32 @@ class IOString < IO
 
   def close_read
     @read.close
+  end
+
+  def closed_read?
+    @read.closed?
+  end
+
+  def closed_write?
+    @write.closed?
+  end
+
+  def initialize_copy obj
+    # i guess this was already done up stream, since it seems to work
+    self
+  end
+
+  alias :old_reopen :reopen
+  def reopen(io, mode_str = nil)
+    raise IOError, "can't set mode on an IOSTring" if mode_str
+    if io.is_a? IOString
+      @write, @read = io.instance_eval { @ios }
+    elsif io.is_a? String
+      read_all
+      write io
+    else
+      raise IOError, "cannot reopen IOString without a string or other IOString"
+    end
   end
   
   # add them to this instance, and not to the superclass
@@ -143,10 +187,6 @@ class IOString < IO
     nil
   end
 
-  def ungetc c
-    @read.write c
-  end
-  
   def initialize init=nil
     @read, @write = IO.pipe
     @overflow = ''
@@ -186,6 +226,14 @@ class IOString < IO
       end
     end
     nil
+  end
+
+  def each
+    Enumerator.new do |y|
+      while r = gets
+        y << r
+      end
+    end
   end
 
   def isatty
