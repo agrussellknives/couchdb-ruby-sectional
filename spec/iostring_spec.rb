@@ -451,20 +451,30 @@ describe "IOString should work almost exactly like StringIO" do
     io.read(6).should == "foo123"
   end
 
-  it "should read" do
+  it "should read (encoding aware)" do
+    # read is not encoding aware with args - it reads raw bytes
+    @io.set_encoding Encoding::UTF_8
     @io.write "\u3042\u3044"
     lambda { @io.read(-1)}.should raise_error(ArgumentError)
     lambda { @io.read(1,2,3,)}.should raise_error(ArgumentError)
-    @io.read(2).should == "\u3042\u3044".force_encoding(Encoding::UTF_8)
+    @io.read(2).should == "\xE3\x81"
+    @io.read(4) # i just happen to know that.
+
+    @io.write "\u3042\u3044"
+    @io.readchars(2).should == "\u3042\u3044"
+
+    @io.write "\u3042\u3044"
+    @io.close_write
+    @io.read.should == "\u3042\u3044"
   end
 
   it "should readpartial" do
+    # readpartial is not encoding aware
+    @io.set_encoding Encoding::UTF_8
     @io.write "\u3042\u3044"
     lambda { @io.readpartial(-1)}.should raise_error(ArgumentError)
     lambda { @io.readpartial(1,2,3,)}.should raise_error(ArgumentError)
-    @io.readpartial.should == "\u3042\u3044"
-    @io.rewind
-    @io.readpartial(@io.size).should == "\u3042\u3044".force_encoding(Encoding::ASCII_8BIT)
+    @io.readpartial(IOString::SystemSizeLimit).should == "\u3042\u3044".force_encoding(Encoding::ASCII_8BIT)
   end
    
 
@@ -472,14 +482,52 @@ describe "IOString should work almost exactly like StringIO" do
     @io.write "\u3042\u3044"
     lambda { @io.read_nonblock(-1)}.should raise_error(ArgumentError)
     lambda { @io.read_nonblock(1,2,3,)}.should raise_error(ArgumentError)
-    @io.read_nonblock.should == "\u3042\u3044"
-
-    @io.rewind
-    @io.read_nonblock(@io.size).should == "\u3042\u3044".force_encoding(Encoding::ASCII_8BIT)
+    # a bunch
+    @io.read_nonblock(2**16).should == "\u3042\u3044".force_encoding(Encoding::ASCII_8BIT)
   end
 
-  it "should get size" do
-    @io.write "1234"
-    @io.size.should == 4
+  it "is selectable" do
+    io2 = IOString.new
+    read_array,write_array,error_array = 3.times.collect { [@io,io2].dup }
+    
+    set_trace_func proc { |event, file, line, id, binding, classname|
+      printf "%8s %s:%-2d %10s %8s\n", event, file, line, id, classname
+    } 
+    
+    readable, writable, errors = select(read_array,write_array,error_array,1)
+
+    set_trace_func nil
+
+    writable.should == [@io,io2] # both arrays are always readable
+    errors.should == [] # no errors yet
+    readable.should == [] # nothing readable yet either
+
+    io2.write "hello"
+    @io.write "hello"
+    
+    readable, writable, errors = select(read_array,write_array,error_array,1)
+    writable.should == [@io,io2] 
+    errors.should == []
+
+    readable.should == [io2,@io]
+    readable.each do |r|
+      r.read_nonblock(10).should == "hello"
+    end
+
+    @io.close_write
+    io2.close_write
+    
+    readable, writable, errors = select(read_array,write_array,error_array,1)
+    readable.should == []
+    writable.should == []
+    errors.should == []
+
+    @io.write "hello"
+    io2.write "hello"
+    
+    readable, writable, errors = select(read_array,write_array,error_array,1)
+    readable.should == []
+    writable.should == []
+    errors.should == [@io,io2]
   end
 end

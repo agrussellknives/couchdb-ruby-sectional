@@ -98,14 +98,14 @@ class IOString < IO
     undef_method meth
   end
 
-  MAP_METHOD = [:fcntl, :ioctl, :close, :status]
+  MAP_METHOD = [:fcntl, :ioctl, :close, :status, :set_encoding]
 
   MAP_METHOD.each do |meth|
     define_method meth do |*args|
       @ios.collect { |i| i.send meth, *args}
     end
   end
- 
+
   SystemSizeLimit = 2**16 
   
   class OverflowError < IOError; end
@@ -137,6 +137,18 @@ class IOString < IO
 
   def closed_write?
     @write.closed?
+  end
+
+  [:external, :internal].each do |t|
+    meth_name = "#{t}_encoding".to_sym
+    define_method meth_name do 
+      encs = @ios.collect { |i| i.send meth_name }
+      if encs.uniq!
+        encs[0]
+      else
+        raise EncodingError, "The #{t} encodings differ for ends of IOSTring"
+      end
+    end
   end
 
   def initialize_copy obj
@@ -192,9 +204,24 @@ class IOString < IO
     @overflow = ''
     write init if init
     @ios = [@write,@read]
+    # set up our encodings
+    enc = "#{Encoding.default_external.name}"
+    enc << ":#{Encoding.default_internal.name}" if Encoding.default_internal
+    @ios.map do |i|
+      i.set_encoding(enc)
+    end
+    @tied_io_for_writing = @write.fileno
     self
   end
 
+  def readchars(chars)
+    res = ''
+    chars.times do
+      res << readchar 
+    end
+    res
+  end
+    
   def overflowed?
     @overflow.size > 0
   end
@@ -242,9 +269,10 @@ class IOString < IO
   alias :tty? :isatty
 
   def fileno
-    @ios.collect { |i| i.fileno }
+    @read.fileno
   end
   alias :fileno :to_i
+
 
   def closed?
     c = @ios.collect { |i| i.closed? }
