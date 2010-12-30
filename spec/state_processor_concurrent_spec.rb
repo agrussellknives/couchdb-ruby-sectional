@@ -18,6 +18,8 @@ class ConcurrentTest
     @@cvar_count += a
   end
 
+  protocol RubyPassThroughProtocol
+
   commands do
     on :test_ivar do |a|
       return test_instance_method_isolation(a)
@@ -56,7 +58,7 @@ module PassServer
   end
 
   def receive_data data
-    p self
+    p data
     data = eval data
     send_data (@co << data)
   end

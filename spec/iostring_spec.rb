@@ -1,6 +1,11 @@
 require_relative '../couchdb-sectional/couchdb_core/utils/iostring'
 require 'timeout'
 require 'tempfile'
+require 'rspec'
+
+RSpec.configure do |c|
+  c.filter_run :collision => true
+end
 
 
 describe "IOString should work almost exactly like StringIO" do
@@ -48,27 +53,34 @@ describe "IOString should work almost exactly like StringIO" do
   end
 
   describe "handles large strings" do
-    it "should be totally seamless if it's less than the system limit" do
+    it "should be totally seamless if it's less than the system limit", collision:true do
       f = IOString.new("a" * (IOString::SystemSizeLimit - 10))
       f.string.should == "a" * (IOString::SystemSizeLimit - 10)
+      f.close
+      f = nil
+      GC.start
+      sleep 1
     end
 
-    it "requires an overflow check if it's more than the system limit" do
+    it "requires an overflow check if it's more than the system limit", collision:true do
       f = IOString.new("a" * (IOString::SystemSizeLimit) + ("b" * 10000))
       lambda { f.close_write }.should raise_error(IOString::OverflowError)
-      debugger
       str = f.read(IOString::SystemSizeLimit)
       f.close_write
       # otherwise the call blocks
       str << f.read(10000)
       str.should == "a" * (IOString::SystemSizeLimit) + ("b" * 10000)
       f.close
+      f = nil
+      GC.start
+      sleep 1
     end
 
-    it "not subject to system limit read" do
-      f = IOString.new("a" * 2**20)
-      str = f.read_nonblock(2**20)
-      str.should == "a" * 2**20
+    it "not subject to system limit read", collision:true do
+      g = IOString.new("a" * (2**20))
+      str = g.read_nonblock(2**20)
+      str.should == "a" * (2**20)
+      g.close
     end
   end
     
@@ -99,7 +111,6 @@ describe "IOString should work almost exactly like StringIO" do
       end
       lambda do
         timeout(1) do
-          t.join  
         end
       end.should raise_error Timeout::Error
       f.close_write
@@ -296,7 +307,6 @@ describe "IOString should work almost exactly like StringIO" do
     @io.write "1234"
     @io.getc.should == "1"
     io2 = @io.dup
-    debugger
     io2.getc.should == "2"
     @io.getc.should == "3"
     io2.getc.should == "4"
@@ -393,6 +403,7 @@ describe "IOString should work almost exactly like StringIO" do
     @io.write("1" * (IOString::SystemSizeLimit + 1000))
     a = []
     lambda do
+      debugger
       IOString::SystemSizeLimit.times do
         a << @io.readbyte
       end
@@ -490,13 +501,7 @@ describe "IOString should work almost exactly like StringIO" do
     io2 = IOString.new
     read_array,write_array,error_array = 3.times.collect { [@io,io2].dup }
     
-    set_trace_func proc { |event, file, line, id, binding, classname|
-      printf "%8s %s:%-2d %10s %8s\n", event, file, line, id, classname
-    } 
-    
     readable, writable, errors = select(read_array,write_array,error_array,1)
-
-    set_trace_func nil
 
     writable.should == [@io,io2] # both arrays are always readable
     errors.should == [] # no errors yet
@@ -509,7 +514,7 @@ describe "IOString should work almost exactly like StringIO" do
     writable.should == [@io,io2] 
     errors.should == []
 
-    readable.should == [io2,@io]
+    readable.should == [@io,io2]
     readable.each do |r|
       r.read_nonblock(10).should == "hello"
     end
@@ -520,7 +525,7 @@ describe "IOString should work almost exactly like StringIO" do
     readable, writable, errors = select(read_array,write_array,error_array,1)
     readable.should == []
     writable.should == []
-    errors.should == []
+    error.should == []
 
     @io.write "hello"
     io2.write "hello"
