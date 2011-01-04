@@ -3,11 +3,6 @@ require 'timeout'
 require 'tempfile'
 require 'rspec'
 
-RSpec.configure do |c|
-  c.filter_run :collision => true
-end
-
-
 describe "IOString should work almost exactly like StringIO" do
 
   before :each do
@@ -18,7 +13,7 @@ describe "IOString should work almost exactly like StringIO" do
     begin
       #okay
     ensure
-      @io.close
+      @io.close rescue nil
       @io = nil
     end
   end
@@ -268,7 +263,7 @@ describe "IOString should work almost exactly like StringIO" do
   end
 
   it "should close both" do
-    @io.close
+    @io.close 
     lambda { @io.puts "no"}.should raise_error(IOError)
     lambda { @io.gets}.should raise_error(IOError)
   end
@@ -293,9 +288,10 @@ describe "IOString should work almost exactly like StringIO" do
     @io.closed_read?.should == false 
     @io.closed_write?.should == false
     @io.closed? == false
+    debugger
     @io.close_read
     @io.closed_read?.should == true
-    @io.closed_write?.should == false
+    @io.closed_write?.should == false 
     @io.closed? == false
     @io.close_write
     @io.closed_read?.should == true
