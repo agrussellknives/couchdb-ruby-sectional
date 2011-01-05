@@ -59,6 +59,58 @@
 #    end
 #  end
 #end
+#
+
+#class ContactList < Section
+#  class Contact < Section
+#    template do 
+#    <<-HTML
+#      <h5 class="name">
+#        <a href="{{me}}/mail">{{name}}</a>
+#        <span class="actions">
+#          <a href="{{me}}/delete">delete</a>
+#          <a href="{{me}}/edit">edit</a>
+#          <a href="{{me}}/view">view</a>
+#        </span> 
+#      </h5>
+#    HTML
+#  end
+# 
+#  template do
+#    <<-HTML
+#      <ul class="contact_list">
+#        {{.contact}
+#      </ul>
+#    HTML
+#  end
+#
+#  commands do
+#    answer contact_list do
+#      on do |contact|
+#        switch_state Contact[contact]
+#          on :mail do
+#            switch_state MailFormDialog  
+#          on :delete do
+#            answer SystemConfirmDialog do
+#              on :yes { return }
+#              on :no { answer }
+#          on :edit
+#            answer ContactEdit[contact] 
+#          on :save
+#          on :cancel
+#            answer SystemConfirmDialog do
+#              on :yes { answer }
+#              on :no { return }
+#            end
+#          on :view
+#            return contact
+#        end
+#      end
+#    end
+#  end
+#end
+
+
 
 describe "section should be able to draw themselves" do
   pending

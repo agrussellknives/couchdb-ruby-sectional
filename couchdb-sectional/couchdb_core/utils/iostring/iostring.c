@@ -8,8 +8,7 @@ extern void rb_io_check_initialized(rb_io_t *fptr);
 
 // duplicated from io.c
 #define GetWriteIO(io) rb_io_get_write_io(io)
-
-
+#define rb_sys_fail_path(path) rb_sys_fail(NIL_P(path) ? 0 : RSTRING_PTR(path))
 // shamelessly copied from HEAD.
 
 VALUE
@@ -38,52 +37,111 @@ rb_iostring_closed_read(VALUE io)
     rb_io_check_initialized(fptr);
     return 0 <= fptr->fd ? Qfalse : Qtrue;
 }
-// override of close_read
+// implemented in c for symmetrry more than anything else
 static VALUE
+rb_iostring_closed_write(VALUE io)
+{
+    rb_io_t *fptr;
+    VALUE write_io;
+    write_io = GetWriteIO(io); 
+    fptr = RFILE(write_io)->fptr;
+    rb_io_check_initialized(fptr);
+    return 0 <= fptr->fd ? Qfalse : Qtrue;
+}
+
+static void
+iostring_check_security(VALUE io)
+{
+  if (rb_safe_level() >= 4 && !OBJ_UNTRUSTED(io)) 
+    rb_raise(rb_eSecurityError, "Insecure: can't close");
+}
+
+static void
+iostring_close_fd(rb_io_t *fptr)
+{
+  VALUE err = Qnil;
+  if (fptr->fd < 0)
+    rb_raise(rb_eIOError,"closed stream");
+
+  if (close(fptr->fd) < 0 && NIL_P(err)) 
+    err = INT2NUM(errno);
+
+  fptr->fd = -1;
+  fptr->stdio_file = 0;
+  fptr->mode &= ~(FMODE_READABLE|FMODE_WRITABLE);
+  
+  if (!NIL_P(err)) {
+    switch(TYPE(err)) {
+      case T_FIXNUM:
+      case T_BIGNUM:
+        errno = NUM2INT(err);
+        rb_sys_fail_path(fptr->pathv);
+
+      default:
+        rb_exc_raise(err);
+    }
+  }
+}
+
+// override of close_read
+static VALUE 
 rb_iostring_close_read(VALUE io)
+{
+    rb_io_t *fptr;
+    
+    iostring_check_security(io);
+    fptr = RFILE(io)->fptr; 
+    
+    // close the reading end, but leave the writing end open
+    // we don't clean up - raise an exception if it's already closed
+    iostring_close_fd(fptr);
+    return Qnil;
+}
+
+// override of close_write
+static VALUE
+rb_iostring_close_write(VALUE io)
 {
     rb_io_t *fptr;
     VALUE write_io;
 
-    if (rb_safe_level() >= 4 && !OBJ_UNTRUSTED(io)) {
-    rb_raise(rb_eSecurityError, "Insecure: can't close");
-    }
-    GetOpenFile(io, fptr);
-    if (is_socket(fptr->fd, fptr->pathv)) {
-#ifndef SHUT_RD
-# define SHUT_RD 0
-#endif
-        if (shutdown(fptr->fd, SHUT_RD) < 0)
-            rb_sys_fail_path(fptr->pathv);
-        fptr->mode &= ~FMODE_READABLE;
-        if (!(fptr->mode & FMODE_WRITABLE))
-            return rb_io_close(io);
-        return Qnil;
-    }
-
-    // need to skip this part and just close the reading
-    // end.  this thing IS a duplex io, it just has two
-    // non duplex ends
+    iostring_check_security(io);
     write_io = GetWriteIO(io);
-    if (io != write_io) {
-        rb_io_t *wfptr;
-        rb_io_fptr_cleanup(fptr, FALSE);
-        GetOpenFile(write_io, wfptr);
-        RFILE(io)->fptr = wfptr;
-        RFILE(write_io)->fptr = NULL;
-        rb_io_fptr_finalize(fptr);
-        return Qnil;
-    }
+    fptr = RFILE(write_io)->fptr;
+   
+    // since tied is always something this should really comeup
+    if (fptr->mode & FMODE_READABLE || NIL_P(write_io))
+      rb_raise(rb_eIOError, "closing non-duplex IO for writing");
+   
+    // remove the tied_io so it doesn't confus the rest of ruby 
+    iostring_close_fd(fptr);
+    fptr = RFILE(io)->fptr;
+    fptr->tied_io_for_writing=0;
+    return Qnil;
+}
+// 
 
-    if (fptr->mode & FMODE_WRITABLE) {
-    rb_raise(rb_eIOError, "closing non-duplex IO for reading");
-    }
-    return rb_io_close(io);
+// return a hash of the fptr struct for debugging
+static VALUE
+rb_iostring_fptr(VALUE io)
+{
+  rb_io_t *fptr;
+  VALUE hash = Qnil;
+  fptr = RFILE(io)->fptr;
+  hash = rb_hash_new();
+
+  rb_hash_aset(hash,rb_str_new2("fd"),INT2NUM(fptr->fd));
+  rb_hash_aset(hash,rb_str_new2("tied_io_for_writing"),fptr->tied_io_for_writing);
+  return hash;
 }
 
 void Init_iostring() {
   TiedWriter = rb_define_module("TiedWriter");
-  rb_define_method(TiedWriter,"write_io=",rb_io_set_write_io,1);
+  rb_define_method(TiedWriter,"write_io=",rb_iostring_set_write_io,1);
   rb_define_method(TiedWriter,"write_io",rb_io_get_write_io,0);
-  rb_define_method(TiedWriter,"closed_read?",rb_io_closed_read,0);
+  rb_define_method(TiedWriter,"closed_read?",rb_iostring_closed_read,0);
+  rb_define_method(TiedWriter,"closed_write?",rb_iostring_closed_write,0);
+  rb_define_method(TiedWriter,"close_read",rb_iostring_close_read,0);
+  rb_define_method(TiedWriter,"close_write",rb_iostring_close_write,0);
+  rb_define_method(TiedWriter,"fptr",rb_iostring_fptr,0);
 }

@@ -132,10 +132,6 @@ class IOString < IO
     nil
   end
 
-  def closed_write?
-    write_io.closed?
-  end
-  
   [:external, :internal].each do |t|
     meth_name = "#{t}_encoding".to_sym
     define_method meth_name do 
@@ -259,13 +255,13 @@ class IOString < IO
   alias :tty? :isatty
 
   def closed?
-    [super, write_io.closed?].include? false ? false : true
+    [closed_read?, closed_write?].include? false ? false : true
   end
 
   def fsync
     raise Errno::EINVAL, "can't fsync pipes"
   end
-
+  #add_logging(*instance_methods.to_a)
 end 
 
 
