@@ -87,39 +87,49 @@ iostring_close_fd(rb_io_t *fptr)
 static VALUE 
 rb_iostring_close_read(VALUE io)
 {
-    rb_io_t *fptr;
-    
-    iostring_check_security(io);
-    fptr = RFILE(io)->fptr; 
-    
-    // close the reading end, but leave the writing end open
-    // we don't clean up - raise an exception if it's already closed
-    iostring_close_fd(fptr);
-    return Qnil;
+  rb_io_t *fptr;
+  
+  iostring_check_security(io);
+  fptr = RFILE(io)->fptr; 
+  
+  // close the reading end, but leave the writing end open
+  // we don't clean up - raise an exception if it's already closed
+  iostring_close_fd(fptr);
+  return Qnil;
 }
 
 // override of close_write
 static VALUE
 rb_iostring_close_write(VALUE io)
 {
-    rb_io_t *fptr;
-    VALUE write_io;
+  rb_io_t *fptr;
+  VALUE write_io;
 
-    iostring_check_security(io);
-    write_io = GetWriteIO(io);
-    fptr = RFILE(write_io)->fptr;
-   
-    // since tied is always something this should really comeup
-    if (fptr->mode & FMODE_READABLE || NIL_P(write_io))
-      rb_raise(rb_eIOError, "closing non-duplex IO for writing");
-   
-    // remove the tied_io so it doesn't confus the rest of ruby 
-    iostring_close_fd(fptr);
-    fptr = RFILE(io)->fptr;
-    fptr->tied_io_for_writing=0;
-    return Qnil;
+  iostring_check_security(io);
+  write_io = GetWriteIO(io);
+  fptr = RFILE(write_io)->fptr;
+ 
+  // since tied is always something this should really comeup
+  if (fptr->mode & FMODE_READABLE || NIL_P(write_io))
+    rb_raise(rb_eIOError, "closing non-duplex IO for writing");
+ 
+  // remove the tied_io so it doesn't confus the rest of ruby 
+  iostring_close_fd(fptr);
+  fptr = RFILE(io)->fptr;
+  fptr->tied_io_for_writing=0;
+  return Qnil;
 }
-// 
+// set the fileno to something specific.  mostly useful for
+// dupping.  in fact, this is pretty much what the dup function does
+// we just need to subvert it a bit.
+static VALUE
+rb_iostring_set_fileno(VALUE io, int fd)
+{
+  rb_io_t *fptr;
+  fptr = GetOpenFile(io);
+  fptr->fd = fd;
+  return INT2FIXNUM(fd);
+}
 
 // return a hash of the fptr struct for debugging
 static VALUE

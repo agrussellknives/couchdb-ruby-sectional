@@ -53,7 +53,9 @@ class IOString < IO
         args[0] = args[0][0..(SystemSizeLimit-1)]
       end
       begin
-        suc = original_method.bind(self).call(*args, &blk) || 0 # don't let it go nil
+        # the only methods that return nil are the ones that write
+        # one character, so if it returns nil, replace it with one
+        suc = original_method.bind(self).call(*args, &blk) || 1 # don't let it go nil
         #overflow is basically our internal buffer
         #shift off th number of successfully written characters
         @overflow = @overflow[suc..-1] || ''
@@ -98,7 +100,7 @@ class IOString < IO
 
   #add_byte_wise_overflow_check(:getbyte,:readbyte,:each_byte, :each_char)
 
-  UNDEF_METHOD = [:ungetbyte, :ungetc, :fileno]
+  UNDEF_METHOD = [:ungetbyte, :ungetc]
 
   UNDEF_METHOD.each do |meth|
     undef_method meth
@@ -144,25 +146,6 @@ class IOString < IO
     end
   end
 
-  def initialize_copy obj
-    # i guess this was already done up stream, since it seems to work
-    self
-  end
-
-  alias :old_reopen :reopen
-  # i can almost guarantee this doesn't work anymore
-  def reopen(io, mode_str = nil)
-    raise IOError, "can't set mode on an IOSTring" if mode_str
-    if io.is_a? IOString
-      @write, @read = io.instance_eval { ios }
-    elsif io.is_a? String
-      read_all
-      write io
-    else
-      raise IOError, "cannot reopen IOString without a string or other IOString"
-    end
-  end
-  
   # add them to this instance, and not to the superclass
   add_overflow_close_check(:close_write, :close_read, :close)
 
@@ -191,6 +174,14 @@ class IOString < IO
 
   def pid
     nil
+  end
+
+  def initialize_copy obj
+    # i guess this was already done up stream, since it seems to work
+    debugger;1
+    self.reopen(obj.fileno)
+    self.write_io = obj.write_io 
+    self
   end
 
   def initialize init=nil
