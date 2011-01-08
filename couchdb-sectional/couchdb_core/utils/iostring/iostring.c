@@ -123,12 +123,14 @@ rb_iostring_close_write(VALUE io)
 // dupping.  in fact, this is pretty much what the dup function does
 // we just need to subvert it a bit.
 static VALUE
-rb_iostring_set_fileno(VALUE io, int fd)
+rb_iostring_set_fd(VALUE io, VALUE fdn)
 {
   rb_io_t *fptr;
-  fptr = GetOpenFile(io);
+  int fd;
+  fd = NUM2INT(fdn);
+  GetOpenFile(io,fptr);
   fptr->fd = fd;
-  return INT2FIXNUM(fd);
+  return INT2FIX(fd);
 }
 
 // return a hash of the fptr struct for debugging
@@ -153,5 +155,6 @@ void Init_iostring() {
   rb_define_method(TiedWriter,"closed_write?",rb_iostring_closed_write,0);
   rb_define_method(TiedWriter,"close_read",rb_iostring_close_read,0);
   rb_define_method(TiedWriter,"close_write",rb_iostring_close_write,0);
+  rb_define_private_method(TiedWriter,"fd=",rb_iostring_set_fd,1);
   rb_define_method(TiedWriter,"fptr",rb_iostring_fptr,0);
 }

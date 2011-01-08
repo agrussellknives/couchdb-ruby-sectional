@@ -293,6 +293,7 @@ describe "IOString should work almost exactly like StringIO" do
   end
 
   it "should dup" do
+    debugger
     @io.write "1234"
     @io.getc.should == "1"
     io2 = @io.dup

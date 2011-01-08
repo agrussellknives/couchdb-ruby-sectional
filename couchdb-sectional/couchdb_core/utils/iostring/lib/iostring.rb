@@ -79,7 +79,7 @@ class IOString < IO
       if overflowed?
         c, @overflow = @overflow.chr, @overflow[1..-1]
         begin 
-          @write.putc c 
+          putc c 
         rescue => e
           debugger; 1
         end
@@ -174,14 +174,6 @@ class IOString < IO
 
   def pid
     nil
-  end
-
-  def initialize_copy obj
-    # i guess this was already done up stream, since it seems to work
-    debugger;1
-    self.reopen(obj.fileno)
-    self.write_io = obj.write_io 
-    self
   end
 
   def initialize init=nil
