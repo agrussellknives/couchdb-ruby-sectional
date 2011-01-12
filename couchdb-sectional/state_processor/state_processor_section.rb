@@ -1,4 +1,5 @@
 require 'uuidtools'
+require 'fiber'
 
 require_relative './state_processor_argument_matching'
 require_relative './state_processor_stack'
@@ -81,12 +82,15 @@ module StateProcessor
         retry 
       end
       # execute a block if one was passed to us an we are not already defined
+      @result = processor_for(state_class, opts).process(@command.flatten,top)
+    end
+
+    def processor_for state_class, opts = nil
       processor = if @processors.has_key?(state_class) then
         @processors[state_class]
       else
         @processors[state_class] = state_class.new(self,opts)
       end
-      @result = processor.process(@command.flatten,top)
     end
 
     def dispatch obj, m, *args, &block
@@ -163,6 +167,8 @@ module StateProcessor
           @current_state = Fiber.new do |new_cmd|
             @command = new_cmd
             loop do
+              #puts self.class
+              #debugger if self.class == IndependentState
               # this makes the stack unwind to the top of the current command block
               # when you resume the current state fiber, this is where it starts again.
               # it actually runs all the way down to the end of this loop 
@@ -200,22 +206,26 @@ module StateProcessor
                   cs.worker.respond_to? :report_error
                 end
                 raise e unless rep
-                debugger
                 self.instance_exec e, &rep.worker.report_error
                 clean
                 @command = Fiber.yield result
               else
-                @command = Fiber.yield result
+                if @origin
+                  @command = @origin.transfer result
+                else
+                  @command = Fiber.yield result
+                end
               end
             end
           end
         end
         result = @current_state.transfer @command
       rescue FiberError => e
-        error "this really should happen. a fiber had a problem -> #{e}"
+        error "this really shouldn't happen. a fiber had a problem -> #{e}"
         @current_state = false
         retry
       end
+      result
     end
     private :work
 

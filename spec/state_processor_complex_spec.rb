@@ -42,10 +42,10 @@ class AdvancedStateProcessor
   commands do 
 
     on :hello do |a|
-      debugger
       send IndependentState, [:hi,a]  
       answer :ok do
         on :who do
+          debugger
           n = send IndependentState, [:who]
           return n
         end
@@ -53,7 +53,9 @@ class AdvancedStateProcessor
     end
 
     on :hello_again do |a|
+      debugger
       send IndependentState, [:hi_again, a], deferred: true do |n|
+        sleep 5
         @n = n 
       end
       return @n
@@ -119,7 +121,12 @@ class AdvancedStateProcessor
 
     on :external_switch do
       switch_state ExternalSwitchState
-      return "no, i should never been seen"
+      return "fall through"
+    end
+
+    on :external_top do
+      switch_state ExternalSwitchState, top: true
+      return "fall through"
     end
 
     on :reset_top do
@@ -153,6 +160,10 @@ class ExternalSwitchState
   protocol RubyPassThroughProtocol
 
   commands do
+    on :fall_through do
+      "fine then"
+    end
+
     on :okay do
       return "external"
     end
@@ -168,6 +179,7 @@ class ExternalSwitchState
     on :not_okay do
       answer "not_okay"
     end
+
   end
 end
 
@@ -258,33 +270,33 @@ describe AdvancedStateProcessor, "subcomponent matching" do
   end
 
   describe "submessages to independents" do
-    pending "don't work"
     
-    #before :all do 
-    #  @eco = EventedCommObject.new AdvancedStateProcessor
-    #end
+    before :all do 
+      @eco = EventedCommObject.new AdvancedStateProcessor
+    end
 
-    #it "it should be able to pass a 'submessage' to other states" do
-    #  out = @eco << [:hello,"bob"]
-    #  out.should == :ok
-    #  out = @eco << [:who]
-    #  out.should == "bob"
-    #end
+    it "it should be able to pass a 'submessage' to other states" do
+      out = @eco << [:hello,"bob"]
+      out.should == :ok
+      out = @eco << [:who]
+      out.should == "bob"
+    end
 
-    #it "should be able to async pass a 'submessage'" do
-    #  out = @eco << [:hello_again,"bob"]
-    #  out.should == nil
-    #  out = @eco << [:hello_again_response]
-    #  out.should == "hello from bob"
-    #end
+    it "should be able to async pass a 'submessage'" do
+      debugger
+      out = @eco << [:hello_again,"bob"]
+      out.should == nil
+      out = @eco << [:hello_again_response]
+      out.should == "hello from bob"
+    end
 
-    #after :all do
-    #  # kill the event machine we just started
-    #  EM.next_tick do
-    #    EM.stop 
-    #  end
-    #  @eco.kill_thread
-    #end
+    after :all do
+      # kill the event machine we just started
+      EM.next_tick do
+        EM.stop 
+      end
+      @eco.kill_thread
+    end
   end
 
   it "should accumulate the results of subcomponents if you ask it to" do
@@ -296,6 +308,16 @@ describe AdvancedStateProcessor, "subcomponent matching" do
     it "should switch state to independent component" do
       out = @co << [:external_switch,:okay]
       out.should == 'external'
+    end
+
+    it "should fall of the end of the external if top is not reset" do
+      out = @co << [:external_switch,:fall_through]
+      out.should == "fine then"
+    end
+
+    it "will return to caller if top is reset" do
+      out = @co << [:external_top, :fall_through]
+      out.should == "fall through"
     end
 
     it "should switch state to independent component and stay there" do

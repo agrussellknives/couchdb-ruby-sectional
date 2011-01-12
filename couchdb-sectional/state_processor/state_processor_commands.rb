@@ -45,7 +45,7 @@ module StateProcessor
       # created yet
       state_class = StateProcessorFactory[state]
       state_class.protocol = options[:protocol] 
-      processor = state_class.new(self,options)
+      processor = processor_for(state_class,opts)
       if options[:deferred] then
         raise ArgumentError, "A block is required for deferred sends" unless block_given?
         raise StateProcessorError, "Not able to defer because there is no event loop running." unless EM.reactor_running?
@@ -59,7 +59,6 @@ module StateProcessor
         end
         processor.succeed res
       else
-        debugger
         res = processor.process(msg,true)
         if block_given?
           yield res
