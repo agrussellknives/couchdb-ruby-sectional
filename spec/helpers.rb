@@ -1,6 +1,8 @@
 require_relative '../couchdb-sectional/couchdb_core/utils/metaid'
 require_relative '../couchdb-sectional/couchdb_core/utils/aspects'
 require_relative '../couchdb-sectional/state_processor'
+require_relative '../couchdb-sectional/thin_adapter'
+require_relative '../couchdb-sectional/section'
 
 require 'base64'
 require 'forwardable'

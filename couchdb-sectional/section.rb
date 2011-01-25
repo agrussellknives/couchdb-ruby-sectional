@@ -1,7 +1,13 @@
+require_relative 'thin_adapter'
+
 class Section
   include StateProcessor
   include StateProcessorWorker
-  
-  def initialize
-  end
+end
+
+class SectionalApp
+  include StateProcessor
+  include StateProcessorWorker
+  include SectionalHTTPApplication
+  protocol HTTPApplication
 end

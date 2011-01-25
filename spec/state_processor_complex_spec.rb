@@ -45,7 +45,6 @@ class AdvancedStateProcessor
       send IndependentState, [:hi,a]  
       answer :ok do
         on :who do
-          debugger
           n = send IndependentState, [:who]
           return n
         end
@@ -53,9 +52,8 @@ class AdvancedStateProcessor
     end
 
     on :hello_again do |a|
-      debugger
       send IndependentState, [:hi_again, a], deferred: true do |n|
-        sleep 5
+        sleep .5 
         @n = n 
       end
       return @n
@@ -121,7 +119,7 @@ class AdvancedStateProcessor
 
     on :external_switch do
       switch_state ExternalSwitchState
-      return "fall through"
+      return "i shouldn't be seen"
     end
 
     on :external_top do

@@ -1,3 +1,5 @@
+require 'ruby-debug'
+
 module Kernel
   def debugger(steps = 1, &block)
     if $0.include? 'couchdb_view_server' then
