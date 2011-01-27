@@ -11,7 +11,7 @@ class HelloWorld < SectionalApp
     end
 
     on :goodbye do |name|
-      send Greeting, [:say_goodby] 
+      send Greeting, [:say_goodbye] 
     end
 
   end
@@ -30,21 +30,21 @@ class Greeting < Section
   commands do
     return_after do
       on :say_hello
-      on :say_good
+      on :say_goodbye
     end
   end
 end
 
 describe "simple section app should say hello and goodbye" do
   before(:all) do
-    debugger;1
     @t = Thread.new do 
       Thin::Server.start('127.0.0.1',3000) do
         use Rack::CommonLogger
         run HelloWorld.new
       end
     end
-    sleep 3
+    # wait for server to start up
+    RestClient.get 'http://127.0.0.1:3000'
   end
 
   it "should say hello world" do
@@ -54,11 +54,11 @@ describe "simple section app should say hello and goodbye" do
 
   it "should say goodbye world" do
     out = RestClient.get 'http://127.0.0.1:3000/goodbye/Norbert'
-    out.should == "Goodby Cruel World"
+    out.should == "Goodbye Cruel World"
   end
 
   after(:all) do
-    @t.kill
+    @t.join
   end
 end
     

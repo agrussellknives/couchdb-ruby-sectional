@@ -8,6 +8,6 @@ end
 class SectionalApp
   include StateProcessor
   include StateProcessorWorker
-  include SectionalHTTPApplication
   protocol HTTPApplication
+  include SectionalHTTPApplication
 end
