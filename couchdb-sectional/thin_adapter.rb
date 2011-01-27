@@ -10,14 +10,21 @@ end
 
 module SectionalHTTPApplication 
   def call(env)
+    req = Rack::Request.new(env)
+    
+    debugger
+
     unless @state_processor
+      puts 'making new state_processor'
       scp = StateProcessor[self.class]
       scp.protocol= HTTPApplication
       @state_processor ||= scp.new
     end
-
-    env['METHOD'] == 'HEAD'
     
+
+    if env['METHOD'] == 'HEAD' then
+      [200, {:content_type => "text/html"},nil]
+    end
 
     cmd = env['REQUEST_PATH'].split('/').collect { |pc| pc.to_sym}[1..-1]
 
@@ -29,6 +36,5 @@ module SectionalHTTPApplication
       [200, {:content_type => "text/html" }, body]
     end
   end
-
 end
 

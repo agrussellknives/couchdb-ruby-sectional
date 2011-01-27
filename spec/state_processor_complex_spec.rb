@@ -53,7 +53,7 @@ class AdvancedStateProcessor
 
     on :hello_again do |a|
       send IndependentState, [:hi_again, a], deferred: true do |n|
-        sleep .5 
+        sleep 0.5 
         @n = n 
       end
       return @n
@@ -281,7 +281,6 @@ describe AdvancedStateProcessor, "subcomponent matching" do
     end
 
     it "should be able to async pass a 'submessage'" do
-      debugger
       out = @eco << [:hello_again,"bob"]
       out.should == nil
       out = @eco << [:hello_again_response]

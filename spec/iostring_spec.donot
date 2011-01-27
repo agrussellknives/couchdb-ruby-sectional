@@ -68,7 +68,6 @@ describe "IOString should work almost exactly like StringIO" do
       g = IOString.new("a" * (2**20))
       str = g.read_nonblock(2**20)
       str.should == "a" * (2**20)
-      debugger
       g.close
     end
   end
@@ -293,7 +292,6 @@ describe "IOString should work almost exactly like StringIO" do
   end
 
   it "should dup" do
-    debugger
     @io.write "1234"
     @io.getc.should == "1"
     io2 = @io.dup

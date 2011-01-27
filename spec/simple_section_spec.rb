@@ -3,22 +3,105 @@ require 'couchrest'
 require 'rest_client'
 require 'thin'
 
+resulting_html = <<-HTML
+  <html>
+    <body>
+      <div class="templated_greeting">
+        <h1> Hello There foo </h1>
+        <a href="goodbye/foo">say goodbye</a>
+        <a href="conversation-stick_around">stick aroud</a>
+      </div>
+      <div class="templated_greeting">
+        <h1> Hello There bar </h1>
+        <a href="goodbye/foo">say goodbye</a>
+        <a href="conversation-stick_around">stick aroud</a>
+      </div>
+    </body>
+  </html>
+HTML
+
 class HelloWorld < SectionalApp
+  template do
+    <<-HTML
+      <html>
+        <body>
+          {{TemplatedGreeting}}
+        </body>
+      </html>
+    HTML
+  end
+
+  section :TemplatedGreeting do
+    template :hello do
+    <<-HTML
+      {{.names}}
+      <h1> Hello There {{name}} </h1>
+      <a href="goodbye/{{name}}">say goodbye</a>
+      <a href="{{Conversation::stick_around}}">stick around</a>
+      {{names}}
+    HTML
+    end
+
+    template :goodbye do
+    <<-HTML
+      <h1>Goodbye then {{name}}</h1>
+    HTML
+    end
+  end
 
   commands do
-    on :hello do |name|
-      send Greeting, [:say_hello] 
-    end
+    return_after do
+      on :forget_me do |name|
+        @name = name
+        return "I remember #{@name}"
+      end
 
-    on :goodbye do |name|
-      send Greeting, [:say_goodbye] 
-    end
+      on :remember_me do |name|
+        return "I forgot #{@name}"
+      end
 
+      on :hello do |name|
+        send Greeting, [:say_hello] 
+      end
+
+      on :goodbye do |name|
+        send Greeting, [:say_goodbye] 
+      end
+    end
+    
+    switch_section TemplatedGreeting do
+      on :template_hello do |*names|
+        @names = names
+        answer with :hello do
+          on :goodbye do |name|
+            @name = name
+            return with :goodbye
+          end
+        end
+      end
+    end
+    
+    raise Error404 
   end
 end
 
+class Conversation < Section
+  template do
+    <<-HTML
+      <h1> What's up {{name}}?</h1>
+    HTML
+  end
+
+  commands do
+    on :stick_around do |name|
+      @name = name
+      return default
+    end
+  end
+end
+      
+
 class Greeting < Section
-  
   def say_hello
     @greeting = "Hello Bright World!"
   end
@@ -44,7 +127,7 @@ describe "simple section app should say hello and goodbye" do
       end
     end
     # wait for server to start up
-    RestClient.get 'http://127.0.0.1:3000'
+    sleep 3
   end
 
   it "should say hello world" do
@@ -57,9 +140,19 @@ describe "simple section app should say hello and goodbye" do
     out.should == "Goodbye Cruel World"
   end
 
+  it "should forget between requests" do
+    out = RestClient.get 'http://127.0.0.1:3000/forget_me/foo'
+    out.should == "I remember foo"
+    out = RestClient.get 'http://127.0.0.1:3000/remember_me/bar'
+    out.should == "I forget"
+  end
+
+  it "should say hello world with a template" do
+    pending
+  end
+
   after(:all) do
-    @t.join
+    Thin::Server.stop
+    @t.kill
   end
 end
-    
-  
