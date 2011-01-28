@@ -194,21 +194,29 @@ module StateProcessor
                 else
                   raise e
                 end
+              rescue StateProcessorRecoverableError => e
+                rep = callchain.each.find do |cs|
+                  cs.respond_to? :report_error
+                end || self
+                result = rep.report_error e
+                @commmand = Fiber.yield result
               rescue StateProcessorDoesNotRespond => e
                 reset_states rescue nil
                 raise e
               rescue StateProcessorError => e
                 clean
-                raise  
+                raise 
               rescue StandardError => e
                 # need to get this into the protocol
-                rep = callchain.each.find do |cs|
-                  cs.worker.respond_to? :report_error
-                end
-                raise e unless rep
-                self.instance_exec e, &rep.worker.report_error
+                # for all other errors, log them and clear the chain
+                # but don't kill the app
+                rep.class.protocol.error e
                 clean
                 @command = Fiber.yield result
+              rescue Exception => e
+                rep.class.protocol.error e
+                clean
+                raise e
               else
                 if @origin
                   @command = @origin.transfer result

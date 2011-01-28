@@ -50,16 +50,41 @@ class HelloWorld < SectionalApp
   end
 
   commands do
-    return_after do
-      on :forget_me do |name|
-        @name = name
+    on :error do |okay|
+      debugger
+      raise Error404
+    end
+    
+    on :forget_me do |name|
+      @name = name
+      return "I will remember #{@name}"
+    end
+
+    on :remember_my_session do |name|
+      unless @name
+        return "I never knew you!"
+      else
         return "I remember #{@name}"
       end
+    end
 
-      on :remember_me do |name|
-        return "I forgot #{@name}"
+    on :remember_my_spot do |name|
+      answer "Hello #{name} how are you?" do
+        on :fine do
+          answer "That's great!"
+        end
+        
+        on :not_so_good do
+          answer "That's too bad."
+        end
+
+        on :suicidal do
+          return "Bye then"
+        end
       end
+    end
 
+    return_after do
       on :hello do |name|
         send Greeting, [:say_hello] 
       end
@@ -121,13 +146,20 @@ end
 describe "simple section app should say hello and goodbye" do
   before(:all) do
     @t = Thread.new do 
-      Thin::Server.start('127.0.0.1',3000) do
+      @ts = Thin::Server.start('127.0.0.1',3000) do
         use Rack::CommonLogger
+        use Rack::Session::Cookie,  :key => 'rack.session',
+                                    :domain => '127.0.0.1'
         run HelloWorld.new
       end
     end
     # wait for server to start up
     sleep 3
+  end
+
+  it "should log errors" do
+    out = RestClient.get 'http://127.0.0.1:3000/error'
+    out.response_code.should == 404
   end
 
   it "should say hello world" do
@@ -140,11 +172,27 @@ describe "simple section app should say hello and goodbye" do
     out.should == "Goodbye Cruel World"
   end
 
-  it "should forget between requests" do
+  it "should forget across sessions, but remember sessions" do
     out = RestClient.get 'http://127.0.0.1:3000/forget_me/foo'
+    out.should == "I will remember foo"
+    cookies = out.cookies.dup
+    out = RestClient.get 'http://127.0.0.1:3000/remember_my_session/bar'
+    out.should == "I never knew you!"
+    out = RestClient.get 'http://127.0.0.1:3000/remember_my_session/bar',{:cookies => cookies}
     out.should == "I remember foo"
-    out = RestClient.get 'http://127.0.0.1:3000/remember_me/bar'
-    out.should == "I forget"
+  end
+
+  it "should remember it's spot if I answer" do
+    out = RestClient.get 'http://127.0.0.1:3000/remember_my_spot/Stephen'
+    out.should == "Hello Stephen how are you?"
+    out = RestClient.get 'http://127.0.0.1:3000/fine', {:cookies => out.cookies}
+    out.should == "That's great!"
+    out = RestClient.get 'http://127.0.0.1:3000/not_so_good', {:cookies => out.cookies}
+    out.should == "That's too bad."
+    out = RestClient.get 'http://127.0.0.1:3000/suicidal', {:cookies => out.cookies}
+    out.should == "Bye then"
+    out = RestClient.get 'http://127.0.0.1:3000/fine', {:cookies => out.cookies}
+    out.response_code.should == 404
   end
 
   it "should say hello world with a template" do
@@ -152,7 +200,7 @@ describe "simple section app should say hello and goodbye" do
   end
 
   after(:all) do
-    Thin::Server.stop
+    @ts.stop 
     @t.kill
   end
 end

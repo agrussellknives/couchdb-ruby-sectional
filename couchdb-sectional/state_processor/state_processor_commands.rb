@@ -155,7 +155,7 @@ module StateProcessor
     # simple stub implementation error handle.
     # we need to figure out which protocol object called me and pass it back the error
     def error e
-      $stderr.puts e 
+      self.class.protocol.error e
     end
   end
 end

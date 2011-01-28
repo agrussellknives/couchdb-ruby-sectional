@@ -9,6 +9,7 @@ module StateProcessor
     class StateProcessorContextConflict < StateProcessorError; end
     class StateProcessorCommandsAlreadyDefined < StateProcessorError; end
     class StateProcessorNoProtocol < StateProcessorError; end
+    class StateProcessorRecoverableError < StateProcessorError; end
   end
 
   module StateProcessorMatchConstant
@@ -22,6 +23,5 @@ module StateProcessor
     StateProcessorMatch = Class.new(BasicObject) 
     StateProcessorNoMatch = Class.new(BasicObject) 
     StateProcessorConsume = Class.new(BasicObject) 
-
   end
 end
