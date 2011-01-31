@@ -33,8 +33,6 @@ module SectionalHTTPApplication
 
     begin
       body = scp.process(cmd)
-      if body.instance_of? RestClientException
-        
     rescue => e
       [500, {:content_type => "text/html" }, [e, e.backtrace].to_s ]
     else

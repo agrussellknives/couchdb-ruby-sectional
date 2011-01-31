@@ -210,11 +210,17 @@ module StateProcessor
                 # need to get this into the protocol
                 # for all other errors, log them and clear the chain
                 # but don't kill the app
-                rep.class.protocol.error e
+                if self.worker.respond_to? :report_error
+                  self.worker.report_error e
+                elsif self.class.protocol.respond_to? :error
+                  self.class.protocol.error e
+                else
+                  raise e
+                end
                 clean
                 @command = Fiber.yield result
               rescue Exception => e
-                rep.class.protocol.error e
+                # we should probably do additional clean up here
                 clean
                 raise e
               else
