@@ -77,9 +77,10 @@ class EventedCommObject
           EM.run do
             $stdout.puts "attached eco"
             EM.attach @ec, EventedCommObject::PassThroughClient, self
+            Thread.pass
           end
         rescue StandardError => e
-          EM.stop_event_loop
+          EM.stop_event_loop if EM.reactor_running?
           @initializing_thread.raise e
         rescue Exception => e
           raise e
