@@ -1,6 +1,7 @@
 module StateProcessor
   module StateProcessorExceptions
     class StateProcessorError < StandardError; end
+    class StateProcessorNotFound < StateProcessorError; end
     class StateProcessorConflictError < StateProcessorError; end
     class StateProcessorExit < StateProcessorError; end
     class StateProcessorDoesNotRespond < StateProcessorError; end

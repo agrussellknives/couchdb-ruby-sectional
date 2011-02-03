@@ -167,8 +167,6 @@ module StateProcessor
           @current_state = Fiber.new do |new_cmd|
             @command = new_cmd
             loop do
-              #puts self.class
-              #debugger if self.class == IndependentState
               # this makes the stack unwind to the top of the current command block
               # when you resume the current state fiber, this is where it starts again.
               # it actually runs all the way down to the end of this loop 
@@ -207,18 +205,15 @@ module StateProcessor
                 clean
                 raise 
               rescue StandardError => e
-                # need to get this into the protocol
-                # for all other errors, log them and clear the chain
-                # but don't kill the app
+                # behavior for standard error is to
+                # log the exception and raise it up the chain
                 if self.worker.respond_to? :report_error
                   self.worker.report_error e
                 elsif self.class.protocol.respond_to? :error
                   self.class.protocol.error e
-                else
-                  raise e
                 end
                 clean
-                @command = Fiber.yield result
+                raise e
               rescue Exception => e
                 # we should probably do additional clean up here
                 clean

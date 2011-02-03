@@ -80,7 +80,6 @@ class EventedCommObject
             Thread.pass
           end
         rescue StandardError => e
-          EM.stop_event_loop if EM.reactor_running?
           @initializing_thread.raise e
         rescue Exception => e
           raise e
@@ -91,10 +90,6 @@ class EventedCommObject
     self
   end
 
-  def kill_thread
-    @em_thread.kill #KILL KILL KILL KILL
-  end
-
   def << msg
     begin
       raise StateProcessor::StateProcessorExceptions::StateProcessorNotFound unless @em_thread.status
@@ -103,6 +98,7 @@ class EventedCommObject
       res = @ap_end.gets 
       decode(res) if res
     rescue => e
+      puts "rescued #{e} in init thread"
       raise e
     end
   end

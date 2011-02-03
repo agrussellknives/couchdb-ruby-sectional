@@ -62,9 +62,8 @@ module StateProcessor
     end
         
     def on_error error=nil, &block
-      # save the block and return it to the processor when
-      # it asks.
-      self.send :define_method, :report_error, block 
+      # save the block and execute as a method
+      define_method :report_error, block 
     end
 
     def key(key=nil)
