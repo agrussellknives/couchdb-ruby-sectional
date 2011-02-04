@@ -3,7 +3,7 @@ module StateProcessor
   module StateProcessorSection
     # Generally used to run a compiled function in the context of the worker.  This is useful if you
     # retrieve code or objects from an outside context and need to pass it into the worker
-    # for execution.  The worker should implement the "run" method so that it understand
+    # for execution.  The worker should implement the "run" method so that it understands
     # the message you send it here.
     # @param [...] args - arguments passed to worker.run
     # @yield [...] results - the return value of worker.run
@@ -37,6 +37,19 @@ module StateProcessor
       end
     end
 
+
+    # Sends a command to a different component, optionally continuing to execute the current
+    # processor.
+    #
+    # Deferred messages may execute the yield block at after the current StateProcessor has
+    # already exited, so you should not rely on that data being available to calling context
+    # 
+    # @param [StateProcessor] state
+    # @param [Array] msg
+    # @param [Hash] opts
+    # @options :deferred = false
+    # @options :protocol = self.class.protocol
+    # @yield If given a block it will yield the return value of the message to it
     def send state, msg, opts = {}, &block
       options = {:deferred => false,
                  :protocol => self.class.protocol }.merge opts

@@ -1,7 +1,23 @@
 require_relative '../couchdb-sectional/state_processor'
-require_relative 'helpers'
-
 require 'eventmachine'
+
+module RubyPassThroughProtocol
+  def <<(cmd)
+    @state_processor.process(cmd)
+  end
+
+  def error(cmd)
+    [:error, cmd]
+  end
+end
+
+class CommObject
+  include RubyPassThroughProtocol
+  attr_accessor :state_processor
+  def initialize stp 
+    @state_processor = StateProcessor[stp].new
+  end
+end
 
 class ConcurrentTest
   include StateProcessor
@@ -54,13 +70,14 @@ end
 module PassServer
   def post_init
     puts '--pass server connection'
-    @co = CommObject.new ConcurrentTest
+    @mco = CommObject.new ConcurrentTest
   end
 
   def receive_data data
     p data
     data = eval data
-    send_data (@co << data)
+    $stdout.puts(@mco.state_processor.worker.inspect)
+    send_data((@mco << data).to_s)
   end
 
   def unbind
@@ -70,15 +87,22 @@ end
 
 describe 'should work over the network' do
   before(:all) do
-    @em = EventMachine::fork_reactor do
-      EventMachine::start_server "127.0.0.1", 5050, PassServer
-    end
-    sleep 2
-    @conn = TCPSocket.new "127.0.0.1", 5050
+    @em = Thread.new do
+        EM.run do
+          EventMachine::start_server "127.0.0.1", 5050, PassServer
+        end
+      end
+    sleep 2 
   end
 
   before(:each) do
-    @conn = TCPSocket.new "127.0.0.1", 5050
+    tries = 0
+    begin
+      @conn = TCPSocket.new "127.0.0.1", 5050
+    rescue Errno::ECONNREFUSED 
+      tries += 1
+      retry if tries < 5
+    end
   end
 
   it "should respond to data" do
@@ -91,6 +115,39 @@ describe 'should work over the network' do
     (eval @conn.recv(1000)).should == 2
     @conn << [:test_ivar,1]
     (eval @conn.recv(1000)).should == 3
+  end
+
+  it "should handle a few connections at once" do
+    results = []
+    tg = ThreadGroup.new 
+    mutex = Mutex.new
+    srand(1)
+    10.times do
+      t = Thread.new do
+        conn = TCPSocket.new "127.0.0.1", 5050
+        a,b = [rand(10), rand(10)]
+        conn << [:test_ivar,a]
+        c = conn.recv(1000)
+        conn << [:test_ivar,b]
+        d = conn.recv(1000)
+        mutex.synchronize do
+          results << { :a => a, :b => b, :c => c.to_i, :d => d.to_i}
+        end
+      end
+      tg.add t
+    end
+    # wait for thread to complete
+    loop do 
+      stati = tg.list.collect do |t|
+        t.status if t.status
+      end
+      break if stati.length == 0
+    end
+   
+    results.each do |r|
+      r[:c].should == r[:a]+1
+      r[:d].should == r[:b] + r[:a] + 1
+    end
   end
 
   it "should forget instance state on new conneciton" do
@@ -116,7 +173,7 @@ describe 'should work over the network' do
   end
 
   after(:all) do
-    Process.kill(9,@em)
+    @em.kill
   end
 end
 

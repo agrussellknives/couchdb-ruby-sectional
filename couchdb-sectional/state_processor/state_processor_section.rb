@@ -207,8 +207,8 @@ module StateProcessor
               rescue StandardError => e
                 # behavior for standard error is to
                 # log the exception and raise it up the chain
-                if self.worker.respond_to? :report_error
-                  self.worker.report_error e
+                if self.respond_to? :report_error
+                  self.report_error e
                 elsif self.class.protocol.respond_to? :error
                   self.class.protocol.error e
                 end

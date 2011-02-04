@@ -202,7 +202,7 @@ end
 
 
 
-describe AdvancedStateProcessor, "subcomponent matching" do
+describe "AdvancedStateProcessor subcomponent matching" do
 
   before do
     @co = CommObject.new AdvancedStateProcessor
@@ -268,7 +268,7 @@ describe AdvancedStateProcessor, "subcomponent matching" do
   end
 
   describe "submessages to independents" do
-    
+   
     before :all do 
       @eco = EventedCommObject.new AdvancedStateProcessor
     end
@@ -287,13 +287,14 @@ describe AdvancedStateProcessor, "subcomponent matching" do
       out.should == "hello from bob"
     end
 
-    after :all do
-      # kill the event machine we just started
-      EM.next_tick do
-        EM.stop 
-      end
-      @eco.kill_thread
-    end
+  # how odd - having this in here kills this WHENVER event machine starts 
+  #  after :all do
+  #    # kill the event machine we just started
+  #    EM.next_tick do
+  #      EM.stop 
+  #    end
+  #    @eco.kill_thread
+  #  end
   end
 
   it "should accumulate the results of subcomponents if you ask it to" do

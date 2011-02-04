@@ -42,7 +42,9 @@ describe "should handle errors" do
     lambda { out = @eco << [:is_alive]}.should raise_error(StateProcessor::StateProcessorExceptions::StateProcessorNotFound)
   end
 
-  it "should not kill the app, but should raise on a not_so_fatal" do
+  it "should not kill the app, but should raise on a not so fatal" do
+    out = @eco << [:is_alive]
+    out.should == true
     out = 'Bob'
     lambda { out = @eco << [:not_so_fatal_error]}.should raise_error(StandardError)
     out.should == "Bob"
@@ -52,7 +54,7 @@ describe "should handle errors" do
 
   it "should call the error handler on not_fatal_at_all" do
     out = @eco << [:not_fatal_at_all_error]
-    out.should == "got an error RecoverableError"
+    out.should == "got an error ErrorHandler::RecoverableError"
   end
 
   after :each do

@@ -7,6 +7,17 @@ require_relative '../couchdb-sectional/section'
 require 'base64'
 require 'forwardable'
 require 'thread'
+require 'timeout'
+
+module ClockTick
+  def clock_tick
+    @chars ||= %w{ | / - \\}
+    $stdout.print @chars[0]
+    sleep 0.1
+    $stdout.print "\b"
+    @chars.push @chars.shift
+  end
+end
 
 module RubyPassThroughProtocol
   def <<(cmd)
@@ -18,6 +29,22 @@ module RubyPassThroughProtocol
   end
 end
 
+module RubyEventPassThroughProtocol
+  def to_processor(cmd)
+    begin
+      res = @state_processor.process(cmd)
+      succeed res
+    rescue StandardError => e
+      set_deferred_status :failed, e
+    end
+  end
+
+  def error(cmd)
+    puts "protocol error called" 
+  end
+end
+    
+
 class CommObject
   include RubyPassThroughProtocol
   attr_accessor :state_processor
@@ -27,79 +54,57 @@ class CommObject
 end
 
 
-class EventedCommObject 
+class EventedCommObject
+  include EM::Deferrable
+  include RubyEventPassThroughProtocol
   
-  class PassThroughClient < EM::Connection
-    include EM::Protocols::LineText2
-    extend Forwardable
-
-    def_delegators :@eco, :encode, :decode, :ap_end, :state_processor
-    
-    def initialize eco
-      @eco = eco
-    end
-    
-    def receive_data data
-      puts "recieved #{decode(data)}"
-      data = state_processor.process(decode(data))
-      puts "got #{data} sending it back"
-      send_data data
-    end
-
-    def send_data data
-      puts "trying to send #{encode(data)}"
-      ap_end.puts(encode(data))
-    end
-  end
-
-  def encode obj
-    Base64.encode64(Marshal.dump(obj)) 
-  end
-  
-  def decode obj
-    Marshal.load(Base64.decode64(obj)) 
-  end
-
-  attr_accessor :state_processor, :ap_end
+  class ResponseRecieved < StandardError; end
 
   def initialize stp
-    @ec = IO.popen('cat','r+')
-    @ap_end = IO.popen('cat','r+')
-     
-    @state_processor = StateProcessor[stp].new()
-    @state_processor.class.protocol = PassThroughClient
+    @state_processor = StateProcessor[stp].new
+    @state_processor.class.protocol = RubyPassThroughProtocol 
     @initializing_thread = Thread.current
-    @em_thread = Thread.new do
-      loop do
+    unless EM.reactor_running?
+      @@em_thread = Thread.new do
         begin
-          $stdout.puts "in front of run"
-          $stdout.puts "#{EM.reactor_running?}"
-          EM.run do
-            $stdout.puts "attached eco"
-            EM.attach @ec, EventedCommObject::PassThroughClient, self
-            Thread.pass
-          end
-        rescue StandardError => e
-          @initializing_thread.raise e
+          EM.run
         rescue Exception => e
-          raise e
+          # fatal errors are raised on the main thread
+          Thread.main.raise e
         end
-      end
+      end 
     end
-    @em_thread.abort_on_exception = true
     self
   end
 
   def << msg
     begin
-      raise StateProcessor::StateProcessorExceptions::StateProcessorNotFound unless @em_thread.status
-      puts "trying to pass message #{msg} with thread #{@em_thread.status}"
-      @ec << encode(msg)
-      res = @ap_end.gets 
-      decode(res) if res
-    rescue => e
-      puts "rescued #{e} in init thread"
-      raise e
+      # wait for the reactor to start
+      raise StateProcessor::StateProcessorExceptions::StateProcessorNotFound unless @@em_thread.status
+      loop { break if EM.reactor_running? }
+
+      this_thread = Thread.current
+
+      callback do |res|
+        set_deferred_status nil 
+        this_thread.raise ResponseRecieved, res 
+      end
+     
+      errback do |e|
+        set_deferred_status nil
+        this_thread.raise e
+      end
+     
+      # run the processor as a deferrable
+      EM.schedule do
+        self.to_processor(msg)
+      end
+      
+      # wait for the response
+      loop { break unless EM.reactor_running? }
+    
+    rescue ResponseRecieved => e
+      e.message == e.class.to_s ? nil : e.message
     end
   end
 end

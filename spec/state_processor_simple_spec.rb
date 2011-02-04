@@ -6,6 +6,8 @@ require_relative 'helpers'
 class SimpleStateProcessor
   include StateProcessor
   include StateProcessor::StateProcessorWorker
+
+  class ConsumableError < StateProcessorRecoverableError; end
   
   class << self
     def simple_match_worker_class_call
@@ -37,6 +39,7 @@ class SimpleStateProcessor
   protocol RubyPassThroughProtocol
 
   on_error do |e|
+    debugger
     error e.message
     error e.backtrace
   end
@@ -71,7 +74,7 @@ class SimpleStateProcessor
     end
 
     on :error_test do
-      bibbity_bobbety_boo
+      raise ConsumableError
     end
 
     on :error_test2
@@ -227,7 +230,7 @@ describe SimpleStateProcessor, 'simple matching' do
         out.should == true
       end
 
-      it "errors within worker code are consumed" do
+      it "errors handled within worker code are consumed" do
         @co << [:error_test]
         out = @co << [:simple_match]
         out.should == true
