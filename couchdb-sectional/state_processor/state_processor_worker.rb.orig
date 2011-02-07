@@ -23,6 +23,10 @@ module StateProcessor
         @context = block
       end
     end
+<<<<<<< HEAD
+
+    
+=======
    
     attr_accessor :state_processor
 
@@ -35,6 +39,7 @@ module StateProcessor
       @state_processor = state_processor
       self
     end
+>>>>>>> f3a3e141f269834d4d24f6aa26be3c0336d465c1
 
     # you can use this within "execute" or the "run" implementation to
     # call methods or look for variables in the scope of
@@ -42,9 +47,15 @@ module StateProcessor
       eval "#{m} *#{args}, &block", self.class.context.binding
     end
 
+<<<<<<< HEAD
+    def method_missing(m, *args, &block)
+      #self.run(m,*args, &block)
+    end
+=======
     #def method_missing(m, *args, &block)
     #  self.run(m,*args, &block)
     #end
+>>>>>>> f3a3e141f269834d4d24f6aa26be3c0336d465c1
    
     # This is a method that you should generally implement in any worker class.  
     # It is used to implement arbitrary callbacks in the context of the worker class

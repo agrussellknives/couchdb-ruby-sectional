@@ -54,7 +54,7 @@ module StateProcessor
       @processors = {}
       @command_block = self.class.command_block
       @previous_command_blocks = []
-      @worker = self.class.worker.new
+      @worker = self.class.worker.new self
       self
     end
 

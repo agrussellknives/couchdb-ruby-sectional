@@ -60,20 +60,37 @@ class EventedCommObject
   
   class ResponseRecieved < StandardError; end
 
+  class << self
+    @@em_thread = nil 
+
+    def start_eco_reactor
+      if EM.reactor_running? and not @@em_thread
+        EM.stop
+        loop { break if not EM.reactor_running? }
+      end
+
+      unless EM.reactor_running?
+        @@em_thread = Thread.new do
+          begin
+            EM.run
+          rescue Exception => e
+            # fatal errors are raised on the main thread
+            Thread.main.raise e
+          end
+        end
+        loop { break if EM.reactor_running? }
+      end
+    end
+  end
+   
   def initialize stp
     @state_processor = StateProcessor[stp].new
     @state_processor.class.protocol = RubyPassThroughProtocol 
     @initializing_thread = Thread.current
-    unless EM.reactor_running?
-      @@em_thread = Thread.new do
-        begin
-          EM.run
-        rescue Exception => e
-          # fatal errors are raised on the main thread
-          Thread.main.raise e
-        end
-      end 
-    end
+    # ECO requires error handling in the event loop
+    # unless we started this reactor - kill it and start
+    # it again
+    EventedCommObject.start_eco_reactor
     self
   end
 
@@ -81,7 +98,6 @@ class EventedCommObject
     begin
       # wait for the reactor to start
       raise StateProcessor::StateProcessorExceptions::StateProcessorNotFound unless @@em_thread.status
-      loop { break if EM.reactor_running? }
 
       this_thread = Thread.current
 
@@ -100,7 +116,8 @@ class EventedCommObject
         self.to_processor(msg)
       end
       
-      # wait for the response
+      # wait for the response to fake blocking
+      # style calls
       loop { break unless EM.reactor_running? }
     
     rescue ResponseRecieved => e
