@@ -4,6 +4,8 @@ module StateProcessor
     # of the on block
     class NoMatchException < StandardError; end
 
+    class MatchProc < Proc; end
+
     # Simple array subclass which enables us to keep track of matches
     # which should stay in place, and "anywhere" matches that will need
     # to be appended onto the end of the argument list
@@ -37,8 +39,8 @@ module StateProcessor
     # @return [StateProcessorMatch, StateProcessorNoMatch]
     def _(arg=nil)
       return StateProcessorMatch unless arg
-      lambda do |a| 
-        break a === arg ? StateProcessorMatch : StateProcessorNoMatch 
+      MatchProc.new do |a| 
+        next a === arg ? StateProcessorMatch : StateProcessorNoMatch 
       end
     end
     alias :anywhere :_
@@ -66,8 +68,8 @@ module StateProcessor
     # second.
     def _!(arg=nil)
       return StateProcessorConsume unless arg
-      lambda do |a|
-        break a === arg ? StateProcessorConsume : StateProcessorNoMatch 
+      MatchProc.new do |a|
+        next a === arg ? StateProcessorConsume : StateProcessorNoMatch 
       end
     end
     alias :save_anywhere :_!
@@ -75,13 +77,16 @@ module StateProcessor
 
     private
     # Function which performs the matching logic.
+    #
+    # There should be a better whay to do this than to call it
+    # for every "on" clause
     def match_args(matchlist,cmd)
       matches = ArgumentMatches.new 
       
       match_proc = []
       cmd_match = []
       matchlist.each do |m|
-        if m.is_a? Proc
+        if m.is_a? MatchProc
           match_proc << m
           cmd_match << StateProcessorFunction
         else
@@ -102,13 +107,28 @@ module StateProcessor
       end
 
       cmd_match.each_with_index do |arg,i|
-        next if cmd_match == StateProcessorFunction
+        next if arg == StateProcessorFunction
         if arg == StateProcessorMatch
           matches << cmd[i] 
         elsif arg == StateProcessorConsume
           matches.save << cmd[i] 
-        elsif (mtcarg = indifferent_match.call(arg, cmd[i]))
-          matches << arg
+        else
+          test = cmd[i]
+          f = case arg
+            when Array 
+              test = test.to_sym rescue test
+              arg.include?(test) 
+            when Regexp 
+              arg.match(test.to_s)
+            when Hash
+              arg == test
+            when Proc
+              # this seems a hair tacky
+              arg === test
+            else
+              indifferent_match.call(arg, cmd[i])
+          end
+          matches << arg if f
         end
       end
 

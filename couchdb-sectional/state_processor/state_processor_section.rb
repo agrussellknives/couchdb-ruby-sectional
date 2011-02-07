@@ -197,6 +197,7 @@ module StateProcessor
                   cs.respond_to? :report_error
                 end || self
                 result = rep.report_error e
+                clean
                 @commmand = Fiber.yield result
               rescue StateProcessorDoesNotRespond => e
                 reset_states rescue nil

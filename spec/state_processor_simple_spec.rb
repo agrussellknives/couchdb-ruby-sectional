@@ -39,13 +39,43 @@ class SimpleStateProcessor
   protocol RubyPassThroughProtocol
 
   on_error do |e|
-    debugger
     error e.message
     error e.backtrace
   end
 
   commands do 
-    
+
+    on :advanced_match do
+      on [:either, :or] do
+        return :either_or 
+      end
+
+      # regex as a first argument is a ruby parsing issue
+      on(/regex/) do
+        return :regex 
+      end
+
+      test = lambda do |v|
+        v == 3
+      end
+
+      on :test, test do
+        return "arg == 3" 
+      end
+      
+      # if you want to use a hash literal - if you 
+      # use {} you need parenthese, otherwise, you dont
+      on({:hash => "should", :be => :equal}) do
+        return {:hash => :equal}
+      end
+
+      on hash: "should also", be: :equal do
+        return { hash: :equal }
+      end
+
+      return false
+    end
+
     on :simple_match do
       return true 
     end
@@ -289,6 +319,46 @@ describe SimpleStateProcessor, 'simple matching' do
       out = @co << [:should, :not, :match]
       out.should == :match
     end
+
+    it "should either object in an array" do
+      out = @co << [:advanced_match, :either]
+      out.should == :either_or
+      out = @co << [:advanced_match, :or]
+      out.should == :either_or
+      out = @co << [:advanced_match, :neither]
+      out.should == false
+    end
+
+    it "should match a regex (indifferently)" do
+      out = @co << [:advanced_match, "regex"]
+      out.should == :regex
+      out = @co << [:advanced_match, "booregexboo"]
+      out.should == :regex
+      out = @co << [:advanced_match, :regex]
+      out.should == :regex
+      out = @co << [:advanced_match, :norex]
+      out.should == false
+    end
+
+    it "should call a proc with item as argument" do
+      out = @co << [:advanced_match, :test, 3]
+      out.should == "arg == 3"
+      out = @co << [:advanced_match, :test, 4]
+      out.should == false
+    end
+
+    it "should match a hash only if it's equal" do
+      out = @co << [:advanced_match, { :hash => "should", :be => :equal }]
+      out.should == {:hash => :equal}
+      out = @co << [:advanced_match, { :hash => "should", :be => :not_equal}]
+      out.should == false
+    end
+
+    it "should do that with new 1.9 hash syntax" do
+      out = @co << [:advanced_match, { :hash => "should also", :be => :equal}]
+      out.should == {:hash => :equal}
+    end
+
   end
 
   it "should stop after one match in a return after block" do
