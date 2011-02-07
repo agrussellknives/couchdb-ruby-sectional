@@ -21,12 +21,17 @@ module StateProcessor
         puts args
       end
     end
-    
-    def initialize
+   
+    attr_accessor :state_processor
+
+    def initialize state_processor=nil
+      super
       self.class.nesting.each do |nest|
         cont = nest.context
         instance_eval &cont if cont
       end
+      @state_processor = state_processor
+      self
     end
 
     # you can use this within "execute" or the "run" implementation to
@@ -35,9 +40,9 @@ module StateProcessor
       eval "#{m} *#{args}, &block", self.class.context.binding
     end
 
-    def method_missing(m, *args, &block)
-      self.run(m,*args, &block)
-    end
+    #def method_missing(m, *args, &block)
+    #  self.run(m,*args, &block)
+    #end
    
     # This is a method that you should generally implement in any worker class.  
     # It is used to implement arbitrary callbacks in the context of the worker class
