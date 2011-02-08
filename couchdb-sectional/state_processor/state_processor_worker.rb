@@ -1,5 +1,7 @@
 require 'active_support/concern'
 
+require_relative '../couchdb_core/utils/aspects'
+
 module StateProcessor
   module StateProcessorWorker
     include StateProcessor::StateProcessorExceptions
@@ -22,16 +24,17 @@ module StateProcessor
         return @context if not block_given?
         @context = block
       end
+
+      def method_added method_name
+        add_context_setup :run if method_name == :run
+      end
     end
-   
+
     attr_accessor :state_processor
 
     def initialize state_processor=nil
       super
-      self.class.nesting.each do |nest|
-        cont = nest.context
-        instance_eval &cont if cont
-      end
+      context_setup
       @state_processor = state_processor
       self
     end
@@ -40,6 +43,27 @@ module StateProcessor
     # call methods or look for variables in the scope of
     def call_with_context m, *args, &block
       eval "#{m} *#{args}, &block", self.class.context.binding
+    end
+
+    def context_setup
+      conts = []
+      if state_processor 
+        conts = contexts
+      end
+      conts << context if context
+      debugger
+      conts.each do |c|
+        instance_eval &c
+      end
+    end
+
+    def context &block
+      return @context if not block_given?
+      @context = block
+    end
+
+    def contexts
+      state_processor.callchain.collect { |i| i.worker.context }
     end
 
     #def method_missing(m, *args, &block)
@@ -51,5 +75,6 @@ module StateProcessor
     def run *args
       raise NotImplementedError, "You should implement the run method in your own worker class."
     end
+
   end
 end
