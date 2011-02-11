@@ -80,7 +80,6 @@ module StateProcessor
     # You normally use this to tell the worker something you wouldn't normally
     # know about the state that it was called from
     def context &block
-      debugger
       self.worker.context(&block)  
     end
 

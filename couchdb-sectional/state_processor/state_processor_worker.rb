@@ -1,4 +1,5 @@
 require 'active_support/concern'
+require 'sender'
 
 require_relative '../couchdb_core/utils/aspects'
 
@@ -9,7 +10,14 @@ module StateProcessor
 
     define_aspect :context_setup do |method_name, original_method|
       lambda do |*args, &blk|
-        self.send :context_setup
+        self.context_setup 
+        original_method.bind(self).call(*args,&blk)
+      end
+    end
+
+    define_aspect :logging do |method_name, original_method|
+      lambda do |*args, &blk|
+        $stdout.puts "called #{method_name} with #{args}"
         original_method.bind(self).call(*args,&blk)
       end
     end
@@ -26,6 +34,8 @@ module StateProcessor
       end
 
       def method_added method_name
+        # we only need to do this on method redefines
+        return if __caller__ == :alias_method
         add_context_setup :run if method_name == :run
       end
     end
@@ -51,9 +61,8 @@ module StateProcessor
         conts = contexts
       end
       conts << context if context
-      debugger
-      conts.each do |c|
-        instance_eval &c
+      conts.compact.each do |cntx|
+        self.instance_eval &cntx 
       end
     end
 

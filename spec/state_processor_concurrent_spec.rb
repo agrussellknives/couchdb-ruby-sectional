@@ -69,19 +69,16 @@ end
 
 module PassServer
   def post_init
-    puts '--pass server connection'
     @mco = CommObject.new ConcurrentTest
   end
 
   def receive_data data
-    p data
     data = eval data
-    $stdout.puts(@mco.state_processor.worker.inspect)
     send_data((@mco << data).to_s)
   end
 
   def unbind
-    puts '--pass server disconnection'
+    # don't need to do anything
   end
 end
 

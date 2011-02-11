@@ -1,4 +1,5 @@
 require 'active_support/concern'
+require 'active_support/core_ext'
 
 #include state processor stuff
 
@@ -112,6 +113,8 @@ module StateProcessor
 
   included do |name|
     name_sym = name.to_s.split('::').last
-    self.nesting.last.const_set(name_sym,name)
+    silence_warnings do
+      self.nesting.last.const_set(name_sym,name)
+    end
   end
 end

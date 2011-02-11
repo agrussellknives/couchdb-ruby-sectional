@@ -3,7 +3,6 @@ module StateProcessor
 
     # Call stack and state managment
 
-    private 
     # Provides an Enumerator of each of the calling states of the current processor
     # @return [Enumerator] an enumerator that yields each calling state
     def callchain
@@ -30,6 +29,7 @@ module StateProcessor
       end
     end
 
+    private
     # Clears calling state information all the way up the processor stack, removing any stored
     # command blocks and allow the current fiber to expire
     def reset_states
