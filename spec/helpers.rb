@@ -96,7 +96,7 @@ class EventedCommObject
 
   def << msg
     begin
-      # wait for the reactor to start
+      #bad mojo unless the reactor is running... 
       raise StateProcessor::StateProcessorExceptions::StateProcessorNotFound unless @@em_thread.status
 
       this_thread = Thread.current
@@ -118,7 +118,7 @@ class EventedCommObject
       
       # wait for the response to fake blocking
       # style calls
-      loop { break unless EM.reactor_running? }
+      loop { break if not EM.reactor_running? }
     
     rescue ResponseRecieved => e
       e.message == e.class.to_s ? nil : e.message

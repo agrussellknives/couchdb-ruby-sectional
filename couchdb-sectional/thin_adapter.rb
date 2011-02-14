@@ -3,7 +3,7 @@ require_relative 'eval_debugger'
 require_relative 'state_processor'
 
 module HTTPApplication
-  # this doesn't actually do protocol type stuff, since we leverage
+  # this doesn't actually do eventmachin protocol type stuff, since we leverage
   # thin's HTTP EM protocol, but we need it just to let
   # our section know what protocol it's in
   

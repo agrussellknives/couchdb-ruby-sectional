@@ -1,26 +1,9 @@
 require 'active_support/concern'
-require 'sender'
-
-require_relative '../couchdb_core/utils/aspects'
 
 module StateProcessor
   module StateProcessorWorker
     include StateProcessor::StateProcessorExceptions
     extend ActiveSupport::Concern
-
-    define_aspect :context_setup do |method_name, original_method|
-      lambda do |*args, &blk|
-        self.context_setup 
-        original_method.bind(self).call(*args,&blk)
-      end
-    end
-
-    define_aspect :logging do |method_name, original_method|
-      lambda do |*args, &blk|
-        $stdout.puts "called #{method_name} with #{args}"
-        original_method.bind(self).call(*args,&blk)
-      end
-    end
 
     module ClassMethods
       # Use this method if you want to set context variables for your worker class,
@@ -32,19 +15,21 @@ module StateProcessor
         return @context if not block_given?
         @context = block
       end
-
-      def method_added method_name
-        # we only need to do this on method redefines
-        return if __caller__ == :alias_method
-        add_context_setup :run if method_name == :run
+       
+      def <<(*args)
+        debugger
+        puts args
       end
     end
-
+   
     attr_accessor :state_processor
 
     def initialize state_processor=nil
       super
-      context_setup
+      self.class.nesting.each do |nest|
+        cont = nest.context
+        instance_eval &cont if cont
+      end
       @state_processor = state_processor
       self
     end
@@ -55,26 +40,6 @@ module StateProcessor
       eval "#{m} *#{args}, &block", self.class.context.binding
     end
 
-    def context_setup
-      conts = []
-      if state_processor 
-        conts = contexts
-      end
-      conts << context if context
-      conts.compact.each do |cntx|
-        self.instance_eval &cntx 
-      end
-    end
-
-    def context &block
-      return @context if not block_given?
-      @context = block
-    end
-
-    def contexts
-      state_processor.callchain.collect { |i| i.worker.context }
-    end
-
     #def method_missing(m, *args, &block)
     #  self.run(m,*args, &block)
     #end
@@ -82,8 +47,12 @@ module StateProcessor
     # This is a method that you should generally implement in any worker class.  
     # It is used to implement arbitrary callbacks in the context of the worker class
     def run *args
+      puts args
       raise NotImplementedError, "You should implement the run method in your own worker class."
     end
-
+ 
+    def error e
+      self.state_processor.error e 
+    end
   end
 end
