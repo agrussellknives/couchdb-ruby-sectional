@@ -30,6 +30,20 @@ module SectionalHTTPApplication
     end
     
     cmd = req.path[1..-1].split('/').collect { |pc| pc.to_sym }
+    
+    unless @state_processor
+      puts 'making new state_processor'
+      scp = StateProcessor[self.class]
+      scp.protocol= HTTPApplication
+      @state_processor ||= scp.new
+    end
+    
+
+    if env['METHOD'] == 'HEAD' then
+      [200, {:content_type => "text/html"},nil]
+    end
+
+    cmd = env['REQUEST_PATH'].split('/').collect { |pc| pc.to_sym}[1..-1]
 
     begin
       body = scp.process(cmd)

@@ -48,13 +48,14 @@ class HelloWorld < SectionalApp
     HTML
     end
   end
-
+  
+  on :error do |okay|
+    debugger
+    raise Error404
+  end
+ 
   commands do
-    on :error do |okay|
-      debugger
-      raise Error404
-    end
-    
+   
     on :forget_me do |name|
       @name = name
       return "I will remember #{@name}"
@@ -85,6 +86,15 @@ class HelloWorld < SectionalApp
     end
 
     return_after do
+      on :forget_me do |name|
+        @name = name
+        return "I remember #{@name}"
+      end
+
+      on :remember_me do |name|
+        return "I forgot #{@name}"
+      end
+
       on :hello do |name|
         send Greeting, [:say_hello] 
       end
@@ -195,12 +205,19 @@ describe "simple section app should say hello and goodbye" do
     out.response_code.should == 404
   end
 
+  it "should forget between requests" do
+    out = RestClient.get 'http://127.0.0.1:3000/forget_me/foo'
+    out.should == "I remember foo"
+    out = RestClient.get 'http://127.0.0.1:3000/remember_me/bar'
+    out.should == "I forget"
+  end
+
   it "should say hello world with a template" do
     pending
   end
 
   after(:all) do
-    @ts.stop 
+    Thin::Server.stop
     @t.kill
   end
 end
