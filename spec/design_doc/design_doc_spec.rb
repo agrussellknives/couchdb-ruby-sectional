@@ -174,8 +174,8 @@ class TestDesignDoc < DesignDocumentBase
   attachments do
     #inline data attachment
     filename "foo.txt" do
-      {  :content_type => 'text/plain',
-         :data => 'VGhpcyBpcyBhIGJhc2U2NCBlbmNvZGVkIHRleHQ=' }
+      content_type 'text/plain'
+      data 'VGhpcyBpcyBhIGJhc2U2NCBlbmNvZGVkIHRleHQ=' 
     end
     filename "test.jpg"
   end

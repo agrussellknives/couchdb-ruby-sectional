@@ -1,11 +1,15 @@
 class DesignDocumentBase
   class Attachments
+    class Attachment < Hashy
+      allowed_meta :data, :stub, :length, :content_type
+    end
+    
     @@fm = FileMagic.mime
     
     ATTACHMENT_DIRECTORIES = ['attachments','_attachments']
     
     def initialize &block
-      @filenames = {}
+      @attachments = {}
       # use instance_eval here since this generally
       # gets called in a ddoc closure
       instance_eval &block if block_given?
@@ -25,8 +29,8 @@ class DesignDocumentBase
     end
 
     def attachments stub=false
-      return @filenames unless stub
-      fns = @filenames
+      return @attachments.inject({}) { |m,(k,v)| m[k] = v.to_hash; m } unless stub
+      fns = @attachments
       # done this way so we return a new hash, and
       # don't accidentally destroy the attachments
       # hash
@@ -45,28 +49,35 @@ class DesignDocumentBase
     end
 
     def filenames 
-      @filenames.keys 
+      @attachments.keys 
     end
 
-    def filename fn
+    def filename fn, &block
       cwd = Dir.pwd.split(File::Separator).last
       file = File.absolute_path(fn)
-      meta = if block_given? then yield else {} end
+      
+      if block_given? then
+        meta = Attachment.new(&block)
+      else
+        meta = Attachment.new {} #an empty block
+      end
+      
       if not File.exists? file and not meta.has_key? :data
         raise AttachmentError, "Attachment #{fn} does not exist, and there is no inline data."
-      else
-        unless meta.has_key? :data
-          data = File.read(file)
-          meta[:data] = Base64.encode64(data)
-          meta[:content_type] = @@fm.file(file) unless meta.has_key? :content_type
-          comps = file.split(File::Separator)
-          file = comps.last if cwd == comps[-2] or ATTACHMENT_DIRECTORIES.include? comps[-2]
-        else
-          # use the provided filename for inline attachments
-          file = fn
-        end
       end
-      @filenames[file] = meta
+      
+      unless meta.has_key? :data
+        data = File.read(file)
+        meta[:data] = Base64.encode64(data)
+        meta[:content_type] = @@fm.file(file) unless meta.has_key? :content_type
+        comps = file.split(File::Separator)
+        file = comps.last if cwd == comps[-2] or ATTACHMENT_DIRECTORIES.include? comps[-2]
+      else
+        # use the provided filename for inline attachments
+        file = fn
+      end
+      
+      @attachments[file] = meta
       return file
     end
   end

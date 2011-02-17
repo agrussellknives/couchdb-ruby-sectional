@@ -12,6 +12,7 @@ require 'ripper'
 
 require_relative "utils/class_nesting"
 
+require_relative "design_doc/hashy"
 require_relative "design_doc/exceptions"
 require_relative "design_doc/rewrites"
 require_relative "design_doc/attachments"
@@ -72,8 +73,8 @@ class DesignDocumentBase
       mod = section.to_s.camelcase.intern #bah
       define_method section do
         begin
-          mod = self.const_get mod 
-          mod.instance_methods
+          the_mod = self.const_get mod 
+          the_mod.instance_methods
         rescue NameError
           nil
         end
@@ -84,42 +85,40 @@ class DesignDocumentBase
       if block_given? 
         @rewrites = Rewrites.new &block
       else
-        @rewrites
+        @rewrites.to_a rescue nil
       end
     end
 
     def to_json
       json_hash = {}
-      json_hash[:rewrite] = rewrites.to_hash
+      #rewrites is an array... 
+      json_hash[:rewrite] = rewrites
       # we'll do inline attachments first
       # i pretty well know this works, so just comment it out while debugging
       #json_hash[:attachments] = attachments :full
+      #
       imported_files = Set.new
+
       SECTIONS.each do |section|
-        self.send(section).each do |method|
-          src = self.instance_method(method).source_location
-          if import_files.include? src[0]
-            next
-          else
-            imported_files << src[0]
-          end
-        end
+        methods = self.send(section)
+        methods and methods.each do |method|
+          src = const_get(section.to_s.camelize.intern).instance_method(method).source_location
+          next if imported_files.include? src[0]
+          imported_files << src[0]
+        end 
       end
       
-      views.each do |view|
+      views and views.each do |view|
         [:map, :reduce].each do |fun|
-          view.instance_method(fun).source_location
-          if import_files.include? src[0]
-            next
-          else
-            imported_files << src[0]
-          end
+          src = view.instance_method(fun).source_location
+          next if imported_files.include? src[0]
+          imported_files << src[0]
         end
       end
 
       sexps = Set.new
       sexps = imported_files.collect do |f|
-        Ripper.sexp(f)
+        Ripper.sexp(File.open(f))
       end
 
       debugger;1

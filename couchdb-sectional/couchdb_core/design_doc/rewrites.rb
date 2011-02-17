@@ -1,36 +1,16 @@
 class DesignDocumentBase
   class Rewrites
-    class Rewrite
-      def initialize &block 
-        raise ArgumentError, "Block required to rewrite" unless block_given?
-        @rewrite = {}
-        instance_eval &block
-      end
-      def from frm
-        @rewrite[:from] = frm
-      end
-      def to t
-        @rewrite[:to] = t
-      end
+    class Rewrite < Hashy
+
+      allowed_meta [:from, :to, :method, :query]
+
+      alias_method :orig_method, :method
       def method meth
-        #normalize method symbol
-        # yeah... downcase..
         meth = meth.to_s.downcase.intern
         raise ArgumentError, "Unrecognized HTTP verb #{meth}" unless [:get, :put, :head, :post, :delete].include? meth
-        @rewrite[:method] = meth
+        orig_method meth 
       end
-      def query quer
-        raise ArgumentError, "Query rewrite should be a Hash" unless quer.is_a? Hash
-        @rewrite[:query] = quer
-      end
-      
-      def to_hash
-        @rewrite
-      end
-      
-      def to_s
-        @rewrite.to_s
-      end
+
     end
 
     def initialize &block
