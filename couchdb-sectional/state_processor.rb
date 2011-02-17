@@ -13,25 +13,10 @@ require_relative "state_processor/state_processor_section"
 require_relative "state_processor/protocols/nil_protocol"
 require_relative "state_processor/protocols/query_server_protocol"
 
-module ClassNesting
-  # this cannot be the best way to do this
-  # start one up the nesting chain, and see if any of
-  # our outer classes have the method we're looking for.
-  # seriously, this feels pretty wrong...
-  def nesting
-    nesteds = self.to_s.split('::')
-    res = []
-    nesteds.reverse_each do |o| 
-      res << nesteds.join('::').constantize
-      nesteds.pop
-    end
-    res
-  end
-end
 
-class Class
-  include ClassNesting
-end
+#Utilities
+
+require_relative "utils/class_nesting"
 
 module StateProcessor
   extend ActiveSupport::Concern

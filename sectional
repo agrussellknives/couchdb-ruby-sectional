@@ -1,0 +1,17 @@
+#!/usr/bin/env ruby
+
+require 'sourcify'
+require_relative 'section/design_parser'
+
+if $__FILE__==$ARGS[0]
+  dp = DesignParser.new
+  dp.parse($ARGS[1])
+end
+
+#  vim: set ts=2 sw=2 tw=0 ft=ruby:
+
+
+# validated_doc_update: -> function
+# views ->
+#   view_name: {
+#     
