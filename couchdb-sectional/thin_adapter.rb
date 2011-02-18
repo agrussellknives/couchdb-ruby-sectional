@@ -21,6 +21,7 @@ module SectionalHTTPApplication
     req = Rack::Request.new(env)
     puts @state_processor_bag
     unless req.session[:id]
+      debugger
       scp = @state_processor_class.new
       @state_processor_bag[scp.object_id] = scp
       req.session[:id] = scp.object_id
@@ -29,20 +30,6 @@ module SectionalHTTPApplication
       scp.last_access = Time.now
     end
     
-    cmd = req.path[1..-1].split('/').collect { |pc| pc.to_sym }
-    
-    unless @state_processor
-      puts 'making new state_processor'
-      scp = StateProcessor[self.class]
-      scp.protocol= HTTPApplication
-      @state_processor ||= scp.new
-    end
-    
-
-    if env['METHOD'] == 'HEAD' then
-      [200, {:content_type => "text/html"},nil]
-    end
-
     cmd = env['REQUEST_PATH'].split('/').collect { |pc| pc.to_sym}[1..-1]
 
     begin

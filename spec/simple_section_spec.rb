@@ -49,11 +49,6 @@ class HelloWorld < SectionalApp
     end
   end
   
-  on :error do |okay|
-    debugger
-    raise Error404
-  end
- 
   commands do
    
     on :forget_me do |name|
@@ -69,6 +64,10 @@ class HelloWorld < SectionalApp
       end
     end
 
+    on :error do |okay|
+      return true
+    end
+ 
     on :remember_my_spot do |name|
       answer "Hello #{name} how are you?" do
         on :fine do

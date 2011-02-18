@@ -1,7 +1,5 @@
 require 'ruby-debug'
 
-$eventmachine_library = :pure_ruby
-
 #stdlib
 require 'json'
 require 'eventmachine'
